@@ -14,6 +14,7 @@ from src.services.emotion import extract_emotion
 from src.services.event_memory import add_event, save_conversation_turn
 from src.services.diary import accumulate_day_data, check_and_generate_yesterday_diary
 from src.services.pad_service import load_pad_state, save_pad_state, update_pad_from_emotions
+from src.services.notes_updater import should_update_notes
 from src.models.personality import PersonalityWeights
 from src.models.event import Event
 
@@ -52,7 +53,7 @@ def _save_history(user_id: str, messages: list[dict]) -> None:
     )
 
 
-def build_system_prompt(user_id: str) -> tuple[str, PersonalityWeights]:
+def build_system_prompt(user_id: str, retrieved_memories: str | None = None) -> tuple[str, PersonalityWeights]:
     """组装完整 system prompt"""
     memory = load_core_memory(user_id)
     base_weights = load_weights(user_id)
@@ -67,12 +68,21 @@ def build_system_prompt(user_id: str) -> tuple[str, PersonalityWeights]:
     parts.append(base_weights.to_description())
     parts.append(pad_state.to_style_hints())
 
+    if retrieved_memories:
+        parts.append(retrieved_memories)
+
     return "\n\n".join(parts), base_weights
 
 
-def prepare_chat(user_id: str, user_message: str) -> tuple[list[dict], list[dict], PersonalityWeights]:
+async def prepare_chat(user_id: str, user_message: str) -> tuple[list[dict], list[dict], PersonalityWeights]:
     """准备聊天上下文，返回 (messages, history, base_weights)"""
-    system_prompt, base_weights = build_system_prompt(user_id)
+    # LLM 判断记忆检索
+    retrieved_memories = None
+    if settings.memory_retrieval_enabled:
+        from src.services.memory_retrieval import run_memory_retrieval
+        retrieved_memories = await run_memory_retrieval(user_id, user_message)
+
+    system_prompt, base_weights = build_system_prompt(user_id, retrieved_memories)
     history = _load_history(user_id)
     messages = [{"role": "system", "content": system_prompt}]
     messages.extend(history)
@@ -134,17 +144,24 @@ async def post_chat(
     if should_trigger_reflection(user_id):
         reflection_result = await run_reflection(user_id)
 
+    # companion_notes 自动更新（每 N 轮）
+    notes_update = None
+    if should_update_notes(turn_count):
+        from src.services.notes_updater import auto_update_companion_notes
+        notes_update = await auto_update_companion_notes(user_id)
+
     return {
         "emotion": emotion_result.to_dict(),
         "turn_count": turn_count,
         "reflection": reflection_result,
+        "notes_update": notes_update,
     }
 
 
 async def chat_turn(user_id: str, user_message: str) -> dict:
     """非流式完整对话（保留兼容）"""
     await check_and_generate_yesterday_diary(user_id)
-    messages, history, base_weights = prepare_chat(user_id, user_message)
+    messages, history, base_weights = await prepare_chat(user_id, user_message)
 
     from src.services.llm import call_llm
     ai_reply = await call_llm(messages)
@@ -156,7 +173,7 @@ async def chat_turn(user_id: str, user_message: str) -> dict:
 async def chat_turn_stream(user_id: str, user_message: str):
     """流式对话：yield AI token，结束后 yield post_chat 结果"""
     await check_and_generate_yesterday_diary(user_id)
-    messages, history, base_weights = prepare_chat(user_id, user_message)
+    messages, history, base_weights = await prepare_chat(user_id, user_message)
 
     ai_reply = ""
     async for token in stream_llm(messages):

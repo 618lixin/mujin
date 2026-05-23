@@ -39,6 +39,16 @@ class Settings(BaseSettings):
     heartbeat_idle_drift_rate: float = 0.05      # 空闲 PAD 漂移速度
     heartbeat_proactive_enabled: bool = True     # 是否启用主动消息
 
+    # 记忆检索
+    memory_retrieval_enabled: bool = True        # 是否启用 LLM 判断记忆检索
+    memory_retrieval_max_chars: int = 500        # 检索结果注入 prompt 的字符上限
+    memory_retrieval_max_events: int = 3         # 最多检索事件数
+    memory_retrieval_max_conversations: int = 3  # 最多检索对话数
+
+    # 笔记自动更新
+    notes_auto_update_interval: int = 10         # 每 N 轮触发一次笔记更新
+    notes_auto_update_enabled: bool = True       # 是否启用笔记自动更新
+
     model_config = {"env_prefix": "GC_", "env_file": ".env"}
 
 
