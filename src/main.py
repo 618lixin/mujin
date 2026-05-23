@@ -1,5 +1,9 @@
+from pathlib import Path
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 
 from src.api.memory import router as memory_router
 from src.api.init import router as init_router
@@ -22,6 +26,11 @@ app.include_router(memory_router)
 app.include_router(personality_router)
 app.include_router(chat_router)
 app.include_router(diary_router)
+
+
+@app.get("/")
+async def index():
+    return FileResponse(Path(__file__).parent.parent / "static" / "index.html")
 
 
 @app.get("/health")

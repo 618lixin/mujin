@@ -3,7 +3,7 @@ import uuid
 from datetime import datetime
 
 from src.config import settings
-from src.services.llm import call_llm
+from src.services.llm import stream_llm
 from src.services.memory import load_core_memory, format_memory_for_prompt
 from src.services.personality_service import load_weights, save_weights, load_turn_counter, save_turn_counter
 from src.services.personality_engine import (
@@ -70,42 +70,30 @@ def build_system_prompt(user_id: str) -> tuple[str, PersonalityWeights]:
     return "\n\n".join(parts), base_weights
 
 
-async def chat_turn(user_id: str, user_message: str) -> dict:
-    """执行一轮完整对话"""
-    # 检查是否需要生成昨日日记
-    await check_and_generate_yesterday_diary(user_id)
-
-    # 组装 prompt
+def prepare_chat(user_id: str, user_message: str) -> tuple[list[dict], list[dict], PersonalityWeights]:
+    """准备聊天上下文，返回 (messages, history, base_weights)"""
     system_prompt, base_weights = build_system_prompt(user_id)
-
-    # 检查临时补偿
     history = _load_history(user_id)
-    recent_user_msgs = [m["content"] for m in history[-6:] if m["role"] == "user"]
-    # 这里暂不用补偿，在 post-chat 后根据情绪结果处理
-
-    # 构建消息列表
     messages = [{"role": "system", "content": system_prompt}]
     messages.extend(history)
     messages.append({"role": "user", "content": user_message})
+    return messages, history, base_weights
 
-    # 调用 LLM
-    ai_reply = await call_llm(messages)
 
-    # 保存对话历史
+async def post_chat(
+    user_id: str, user_message: str, ai_reply: str,
+    history: list[dict], base_weights: PersonalityWeights,
+) -> dict:
+    """对话后处理：情绪识别、事件写入、权重调整、Reflection、日记累积"""
     history.append({"role": "user", "content": user_message})
     history.append({"role": "assistant", "content": ai_reply})
     _save_history(user_id, history)
 
-    # 更新对话计数
     turn_count = load_turn_counter(user_id) + 1
     save_turn_counter(user_id, turn_count)
 
-    # === 对话后管线 ===
-
-    # 1. 情绪识别
     emotion_result = await extract_emotion(user_message, ai_reply)
 
-    # 2. 事件写入（importance ≥ 0.6）
     if emotion_result.importance >= 0.6 and emotion_result.event_type:
         event = Event(
             id=str(uuid.uuid4())[:8],
@@ -116,7 +104,6 @@ async def chat_turn(user_id: str, user_message: str) -> dict:
         )
         add_event(user_id, event)
 
-    # 3. Reinforcement（基础权重调整）
     if emotion_result.emotions:
         apply_reinforcement(base_weights, emotion_result.emotions)
     analytical = check_analytical_boost(user_message)
@@ -124,17 +111,40 @@ async def chat_turn(user_id: str, user_message: str) -> dict:
         base_weights.adjust(dim, delta)
     save_weights(user_id, base_weights)
 
-    # 4. Reflection 检查
     reflection_result = None
     if should_trigger_reflection(user_id):
         reflection_result = await run_reflection(user_id)
 
-    # 5. 累积日记数据
     accumulate_day_data(user_id, emotion_result)
 
     return {
-        "reply": ai_reply,
         "emotion": emotion_result.to_dict(),
         "turn_count": turn_count,
         "reflection": reflection_result,
     }
+
+
+async def chat_turn(user_id: str, user_message: str) -> dict:
+    """非流式完整对话（保留兼容）"""
+    await check_and_generate_yesterday_diary(user_id)
+    messages, history, base_weights = prepare_chat(user_id, user_message)
+
+    from src.services.llm import call_llm
+    ai_reply = await call_llm(messages)
+
+    post_result = await post_chat(user_id, user_message, ai_reply, history, base_weights)
+    return {"reply": ai_reply, **post_result}
+
+
+async def chat_turn_stream(user_id: str, user_message: str):
+    """流式对话：yield AI token，结束后 yield post_chat 结果"""
+    await check_and_generate_yesterday_diary(user_id)
+    messages, history, base_weights = prepare_chat(user_id, user_message)
+
+    ai_reply = ""
+    async for token in stream_llm(messages):
+        ai_reply += token
+        yield ("token", token)
+
+    post_result = await post_chat(user_id, user_message, ai_reply, history, base_weights)
+    yield ("done", post_result)
