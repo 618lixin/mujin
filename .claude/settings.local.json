@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -c ':*)",
+      "WebSearch",
+      "mcp__web-search-prime__web_search_prime",
+      "mcp__web-reader__webReader",
+      "Bash(npm install:*)",
+      "Bash(git clone:*)",
+      "Bash(export PATH=\"$HOME/.bun/bin:$PATH\")",
+      "Read(//c/Users/31799/.claude/skills/gstack/**)",
+      "Bash(ls setup*)",
+      "Bash(./setup)",
+      "Bash(openspec new:*)",
+      "Bash(openspec status:*)",
+      "Bash(openspec instructions:*)"
+    ]
+  }
+}
