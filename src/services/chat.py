@@ -11,7 +11,7 @@ from src.services.personality_engine import (
     run_reflection,
 )
 from src.services.emotion import extract_emotion
-from src.services.event_memory import add_event
+from src.services.event_memory import add_event, save_conversation_turn
 from src.services.diary import accumulate_day_data, check_and_generate_yesterday_diary
 from src.models.personality import PersonalityWeights
 from src.models.event import Event
@@ -97,6 +97,13 @@ async def post_chat(
 
     # 情绪识别 → 事件沉淀（不改权重）
     emotion_result = await extract_emotion(user_message, ai_reply)
+
+    # 存储对话摘要（供跨会话搜索）
+    save_conversation_turn(
+        user_id, user_message, ai_reply,
+        summary=emotion_result.summary or "",
+        emotions=emotion_result.emotions,
+    )
 
     if emotion_result.importance >= 0.6 and emotion_result.event_type:
         event = Event(

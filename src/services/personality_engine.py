@@ -10,7 +10,7 @@ from src.services.personality_service import (
     load_last_reflection_date,
     save_last_reflection_date,
 )
-from src.services.event_memory import query_events, save_personality_snapshot
+from src.services.event_memory import query_events, save_personality_snapshot, save_insight, get_insights
 from src.services.memory import patch_core_memory
 from src.models.memory import MemoryPatch
 from src.config import settings
@@ -47,6 +47,9 @@ REFLECTION_PROMPT = """你是一个 AI 陪伴者的人格反思系统。
 === 近期日记摘要 ===
 {diary_summaries}
 
+=== 已有洞察 ===
+{existing_insights}
+
 === 当前人格权重 ===
 {current_weights}
 
@@ -54,12 +57,16 @@ REFLECTION_PROMPT = """你是一个 AI 陪伴者的人格反思系统。
 1. 用户最常表达的情绪是什么？
 2. 用户更需要共情还是分析？
 3. 是否有持续性模式（不是单次波动）？
+4. 是否有新的洞察可以积累？（关于情绪模式、行为习惯、价值观变化等）
 
 以 JSON 格式输出（不要输出其他内容）：
 {{
   "analysis": "一句话分析（基于沉淀数据的趋势判断）",
   "new_weights": {{"Ti": 0.0, "Te": 0.0, "Fi": 0.0, "Fe": 0.0, "Si": 0.0, "Se": 0.0, "Ni": 0.0, "Ne": 0.0}},
-  "insight": "关于用户的一个洞察（如有），无则为空字符串"
+  "insight": "关于用户的一个洞察（如有），无则为空字符串",
+  "new_insights": [
+    {{"category": "emotion_pattern|relationship|behavior|value|growth", "content": "具体洞察内容", "confidence": 0.5}}
+  ]
 }}
 """
 
@@ -130,6 +137,11 @@ async def run_reflection(user_id: str) -> dict | None:
     weekly_summaries = _get_weekly_summaries(user_id)
     diary_summaries = _get_recent_diary_summaries(user_id)
 
+    # 已有洞察（让 LLM 能看到之前的认知，避免重复）
+    existing = get_insights(user_id, limit=10)
+    existing_text = "\n".join(f"- [{ins['category']}] {ins['content']} (置信度{ins['confidence']:.0%})"
+                              for ins in existing) if existing else "暂无洞察"
+
     events = query_events(user_id, limit=10, min_importance=0.4)
     events_text = "\n".join(
         f"- [{e.created_at.strftime('%m-%d')}] {e.summary or e.content} ({', '.join(e.emotions)}, {e.importance:.0%})"
@@ -140,6 +152,7 @@ async def run_reflection(user_id: str) -> dict | None:
         weekly_summaries=weekly_summaries,
         recent_events=events_text,
         diary_summaries=diary_summaries,
+        existing_insights=existing_text,
         current_weights=json.dumps(weights.weights, ensure_ascii=False),
     )
 
@@ -186,4 +199,16 @@ async def run_reflection(user_id: str) -> dict | None:
     # 保存权重快照
     save_personality_snapshot(user_id, weights.weights, summary=data.get("analysis", ""))
 
-    return {"analysis": data.get("analysis", ""), "insight": insight, "new_weights": weights.weights}
+    # 存储结构化洞察
+    new_insights = data.get("new_insights", [])
+    for ins in new_insights:
+        if ins.get("content"):
+            save_insight(
+                user_id,
+                category=ins.get("category", "behavior"),
+                content=ins["content"],
+                confidence=min(1.0, max(0.3, ins.get("confidence", 0.5))),
+                source="weekly_reflection",
+            )
+
+    return {"analysis": data.get("analysis", ""), "insight": insight, "new_weights": weights.weights, "new_insights": new_insights}

@@ -36,6 +36,37 @@ def _get_conn(user_id: str) -> sqlite3.Connection:
             created_at TEXT NOT NULL
         )"""
     )
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS conversation_turns (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_msg TEXT NOT NULL,
+            ai_msg TEXT NOT NULL,
+            summary TEXT,
+            emotions TEXT NOT NULL DEFAULT '[]',
+            created_at TEXT NOT NULL
+        )"""
+    )
+    # FTS5 全文搜索索引（跨会话检索）
+    conn.execute(
+        """CREATE VIRTUAL TABLE IF NOT EXISTS turn_search USING fts5(
+            summary,
+            user_msg,
+            content='conversation_turns',
+            content_rowid='id'
+        )"""
+    )
+    # 洞察积累表（结构化的用户模式认知）
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS insights (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            category TEXT NOT NULL,
+            content TEXT NOT NULL,
+            confidence REAL NOT NULL DEFAULT 0.5,
+            source TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )"""
+    )
     conn.commit()
     return conn
 
@@ -146,3 +177,113 @@ def get_personality_snapshots(user_id: str, limit: int = 50) -> list[dict]:
         }
         for r in rows
     ]
+
+
+# ============ 跨会话搜索（FTS5） ============
+
+def save_conversation_turn(
+    user_id: str, user_msg: str, ai_msg: str,
+    summary: str | None = None, emotions: list[str] | None = None,
+) -> None:
+    """存储每轮对话摘要，供跨会话搜索"""
+    conn = _get_conn(user_id)
+    now = datetime.now().isoformat()
+    conn.execute(
+        "INSERT INTO conversation_turns (user_msg, ai_msg, summary, emotions, created_at) "
+        "VALUES (?, ?, ?, ?, ?)",
+        (user_msg, ai_msg, summary or "", json.dumps(emotions or []), now),
+    )
+    # 同步写入 FTS5 索引
+    turn_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+    fts_summary = summary or user_msg[:200]
+    conn.execute(
+        "INSERT INTO turn_search (rowid, summary, user_msg) VALUES (?, ?, ?)",
+        (turn_id, fts_summary, user_msg[:500]),
+    )
+    conn.commit()
+    conn.close()
+
+
+def search_conversations(user_id: str, query: str, limit: int = 5) -> list[dict]:
+    """FTS5 全文搜索历史对话"""
+    conn = _get_conn(user_id)
+    rows = conn.execute(
+        """SELECT ct.id, ct.summary, ct.emotions, ct.created_at
+        FROM conversation_turns ct
+        JOIN turn_search ts ON ct.id = ts.rowid
+        WHERE turn_search MATCH ?
+        ORDER BY rank
+        LIMIT ?""",
+        (query, limit),
+    ).fetchall()
+    conn.close()
+    return [
+        {
+            "id": r["id"],
+            "summary": r["summary"],
+            "emotions": json.loads(r["emotions"]),
+            "created_at": r["created_at"],
+        }
+        for r in rows
+    ]
+
+
+# ============ 洞察积累 ============
+
+def save_insight(
+    user_id: str, category: str, content: str,
+    confidence: float = 0.5, source: str = "",
+) -> None:
+    """
+    存储结构化洞察。
+    category: emotion_pattern | relationship | behavior | value | growth
+    """
+    conn = _get_conn(user_id)
+    now = datetime.now().isoformat()
+    conn.execute(
+        "INSERT INTO insights (category, content, confidence, source, created_at, updated_at) "
+        "VALUES (?, ?, ?, ?, ?, ?)",
+        (category, content, confidence, source, now, now),
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_insights(
+    user_id: str, category: str | None = None, limit: int = 20
+) -> list[dict]:
+    """查询洞察，按置信度降序"""
+    conn = _get_conn(user_id)
+    if category:
+        rows = conn.execute(
+            "SELECT * FROM insights WHERE category = ? ORDER BY confidence DESC, created_at DESC LIMIT ?",
+            (category, limit),
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            "SELECT * FROM insights ORDER BY confidence DESC, created_at DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+    conn.close()
+    return [
+        {
+            "id": r["id"],
+            "category": r["category"],
+            "content": r["content"],
+            "confidence": r["confidence"],
+            "source": r["source"],
+            "created_at": r["created_at"],
+        }
+        for r in rows
+    ]
+
+
+def update_insight_confidence(user_id: str, insight_id: int, new_confidence: float) -> None:
+    """更新洞察置信度（被后续观察验证时提升）"""
+    conn = _get_conn(user_id)
+    conn.execute(
+        "UPDATE insights SET confidence = ?, updated_at = ? WHERE id = ?",
+        (new_confidence, datetime.now().isoformat(), insight_id),
+    )
+    conn.commit()
+    conn.close()
