@@ -10,6 +10,8 @@ from src.api.init import router as init_router
 from src.api.personality import router as personality_router
 from src.api.chat import router as chat_router
 from src.api.diary import router as diary_router
+from src.api.summary import router as summary_router
+from src.api.chapters import router as chapters_router
 
 app = FastAPI(title="Growth Companion", version="0.1.0")
 
@@ -26,6 +28,8 @@ app.include_router(memory_router)
 app.include_router(personality_router)
 app.include_router(chat_router)
 app.include_router(diary_router)
+app.include_router(summary_router)
+app.include_router(chapters_router)
 
 
 @app.get("/")

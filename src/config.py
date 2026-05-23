@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     max_history_turns: int = 20
 
     # Reflection 触发
-    reflection_turn_interval: int = 10
+    reflection_turn_interval: int = 30
 
     model_config = {"env_prefix": "GC_", "env_file": ".env"}
 

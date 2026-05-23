@@ -2,6 +2,7 @@ from fastapi import APIRouter
 
 from src.services.personality_service import load_weights, load_turn_counter
 from src.services.personality_engine import load_last_reflection_date
+from src.services.event_memory import get_personality_snapshots
 
 router = APIRouter(prefix="/api/personality", tags=["personality"])
 
@@ -17,3 +18,8 @@ async def get_personality(user_id: str = "default"):
         "turn_count": turn_count,
         "last_reflection": last_reflection,
     }
+
+
+@router.get("/history")
+async def get_personality_history(user_id: str = "default", limit: int = 50):
+    return get_personality_snapshots(user_id, limit)

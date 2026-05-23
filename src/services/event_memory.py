@@ -28,6 +28,14 @@ def _get_conn(user_id: str) -> sqlite3.Connection:
             updated_at TEXT NOT NULL
         )"""
     )
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS personality_snapshots (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            weights TEXT NOT NULL,
+            summary TEXT,
+            created_at TEXT NOT NULL
+        )"""
+    )
     conn.commit()
     return conn
 
@@ -108,3 +116,33 @@ def delete_event(user_id: str, event_id: str) -> bool:
     deleted = cursor.rowcount > 0
     conn.close()
     return deleted
+
+
+def save_personality_snapshot(user_id: str, weights: dict, summary: str = "") -> None:
+    """保存人格权重快照"""
+    conn = _get_conn(user_id)
+    conn.execute(
+        "INSERT INTO personality_snapshots (weights, summary, created_at) VALUES (?, ?, ?)",
+        (json.dumps(weights), summary, datetime.now().isoformat()),
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_personality_snapshots(user_id: str, limit: int = 50) -> list[dict]:
+    """查询人格权重历史"""
+    conn = _get_conn(user_id)
+    rows = conn.execute(
+        "SELECT * FROM personality_snapshots ORDER BY created_at DESC LIMIT ?",
+        (limit,),
+    ).fetchall()
+    conn.close()
+    return [
+        {
+            "id": r["id"],
+            "weights": json.loads(r["weights"]),
+            "summary": r["summary"],
+            "created_at": r["created_at"],
+        }
+        for r in rows
+    ]

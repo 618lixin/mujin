@@ -1,78 +1,30 @@
 import json
-from datetime import date
+from datetime import date, timedelta
+from pathlib import Path
 
 from src.models.personality import PersonalityWeights
 from src.services.llm import call_cheap_llm
 from src.services.personality_service import (
     load_weights,
     save_weights,
-    load_turn_counter,
-    save_turn_counter,
     load_last_reflection_date,
     save_last_reflection_date,
 )
-from src.services.event_memory import query_events
+from src.services.event_memory import query_events, save_personality_snapshot
 from src.services.memory import patch_core_memory
 from src.models.memory import MemoryPatch
 from src.config import settings
 
 
-# 情绪 → 增强维度的映射
-EMOTION_REINFORCEMENT = {
-    "sadness": {"Fe": 0.04},
-    "anxiety": {"Fe": 0.03, "Ni": 0.02},
-    "anger": {"Te": 0.03},
-    "fear": {"Ni": 0.04},
-    "overwhelm": {"Fe": 0.03, "Ti": 0.02},
-    "joy": {"Fe": 0.02, "Ne": 0.02},
-    "hope": {"Ne": 0.03, "Ni": 0.02},
-    "calm": {"Si": 0.02},
-    "surprise": {"Ne": 0.03},
-    "disgust": {"Ti": 0.03},
-}
-
-# 高压力场景 → 临时补偿
+# ============ Compensation（临时，当轮有效） ============
+# 仅极端情绪场景，不持久化
 STRESS_COMPENSATION = {
-    "overwhelm": {"Te": 0.1, "Ti": 0.05},
-    "anxiety": {"Ni": 0.08, "Te": 0.05},
+    "overwhelm": {"Te": 0.05, "Ti": 0.03},
 }
-
-# 需要分析/决策 → 增强 Te/Ti
-ANALYTICAL_KEYWORDS = {"分析", "帮我决定", "怎么选", "建议", "决策", "利弊", "比较", "选择"}
-
-REFLECTION_PROMPT = """你是一个 AI 陪伴者的人格反思系统。请根据以下信息评估并调整人格权重。
-
-近期事件：
-{recent_events}
-
-当前人格权重：
-{current_weights}
-
-请思考：
-1. 最近用户更需要什么？（共情/分析/实际建议/探索）
-2. 当前权重是否匹配用户需求？
-3. 是否需要调整？调整幅度不要超过 ±0.1。
-
-以 JSON 格式输出（不要输出其他内容）：
-{{
-  "analysis": "一句话分析",
-  "new_weights": {{"Ti": 0.0, "Te": 0.0, "Fi": 0.0, "Fe": 0.0, "Si": 0.0, "Se": 0.0, "Ni": 0.0, "Ne": 0.0}},
-  "insight": "关于用户的一个洞察（如有），无则为空字符串"
-}}
-"""
-
-
-def apply_reinforcement(weights: PersonalityWeights, emotions: list[str]) -> PersonalityWeights:
-    """Reinforcement：根据情绪调整基础权重"""
-    for emotion in emotions:
-        adjustments = EMOTION_REINFORCEMENT.get(emotion, {})
-        for dim, delta in adjustments.items():
-            weights.adjust(dim, delta)
-    return weights
 
 
 def get_compensation(weights: PersonalityWeights, emotions: list[str]) -> PersonalityWeights:
-    """Compensation：生成带临时补偿的权重副本（不修改原始）"""
+    """Compensation：仅在极端情绪下生成临时权重增量（不持久化）"""
     compensation = {}
     for emotion in emotions:
         compensation.update(STRESS_COMPENSATION.get(emotion, {}))
@@ -81,33 +33,119 @@ def get_compensation(weights: PersonalityWeights, emotions: list[str]) -> Person
     return weights
 
 
-def check_analytical_boost(user_message: str) -> dict[str, float]:
-    """检查是否需要增强分析维度"""
-    for kw in ANALYTICAL_KEYWORDS:
-        if kw in user_message:
-            return {"Ti": 0.03, "Te": 0.03}
-    return {}
+# ============ Reflection（人格唯一调整入口） ============
+
+REFLECTION_PROMPT = """你是一个 AI 陪伴者的人格反思系统。
+人格权重只能在反思时微调，调整幅度严格不超过 ±0.02。如果没有明显变化趋势，保持原权重。
+
+=== 近期周报 ===
+{weekly_summaries}
+
+=== 近期重要事件 ===
+{recent_events}
+
+=== 近期日记摘要 ===
+{diary_summaries}
+
+=== 当前人格权重 ===
+{current_weights}
+
+请基于以上沉淀数据（周报、事件、日记），判断用户过去一周的需求趋势：
+1. 用户最常表达的情绪是什么？
+2. 用户更需要共情还是分析？
+3. 是否有持续性模式（不是单次波动）？
+
+以 JSON 格式输出（不要输出其他内容）：
+{{
+  "analysis": "一句话分析（基于沉淀数据的趋势判断）",
+  "new_weights": {{"Ti": 0.0, "Te": 0.0, "Fi": 0.0, "Fe": 0.0, "Si": 0.0, "Se": 0.0, "Ni": 0.0, "Ne": 0.0}},
+  "insight": "关于用户的一个洞察（如有），无则为空字符串"
+}}
+"""
+
+
+def _get_weekly_summaries(user_id: str) -> str:
+    """读取最近的周报"""
+    summary_dir = settings.data_dir / user_id / "summaries"
+    if not summary_dir.exists():
+        return "暂无周报"
+    files = sorted(summary_dir.glob("week-*.md"), reverse=True)[:2]
+    if not files:
+        return "暂无周报"
+    parts = []
+    for f in files:
+        content = f.read_text(encoding="utf-8")[:500]
+        parts.append(f"### {f.stem}\n{content}")
+    return "\n\n".join(parts)
+
+
+def _get_recent_diary_summaries(user_id: str) -> str:
+    """读取最近 7 天的日记摘要"""
+    diary_dir = settings.data_dir / user_id / "diaries"
+    if not diary_dir.exists():
+        return "暂无日记"
+    today = date.today()
+    parts = []
+    for i in range(7):
+        d = today - timedelta(days=i)
+        path = diary_dir / f"{d.isoformat()}.md"
+        if path.exists():
+            content = path.read_text(encoding="utf-8")[:200]
+            parts.append(f"- {d.isoformat()}: {content}")
+    return "\n".join(parts) if parts else "暂无日记"
+
+
+def should_trigger_reflection(user_id: str) -> bool:
+    """
+    沉淀式触发：每周只触发一次 Reflection。
+    条件：上次 Reflection 不是本周。
+    """
+    last_date = load_last_reflection_date(user_id)
+    if last_date is None:
+        return True  # 从未反思过
+
+    last = date.fromisoformat(last_date)
+    today = date.today()
+
+    # 同一个 ISO 周内不重复触发
+    if last.isocalendar()[:2] == today.isocalendar()[:2]:
+        return False
+
+    # 至少间隔 5 天（避免跨周边界时连续触发）
+    if (today - last).days < 5:
+        return False
+
+    return True
 
 
 async def run_reflection(user_id: str) -> dict | None:
-    """执行 Reflection：回顾近期事件，调整权重"""
+    """
+    执行 Reflection：唯一修改持久化权重的地方。
+    输入：周报 + 事件 + 日记摘要（全部是沉淀后的数据）
+    输出：微调权重（±0.02）+ 洞察
+    """
     weights = load_weights(user_id)
 
-    # 获取近期重要事件
-    events = query_events(user_id, limit=5, min_importance=0.5)
+    # 收集沉淀数据
+    weekly_summaries = _get_weekly_summaries(user_id)
+    diary_summaries = _get_recent_diary_summaries(user_id)
+
+    events = query_events(user_id, limit=10, min_importance=0.4)
     events_text = "\n".join(
-        f"- [{e.created_at.strftime('%m-%d')}] {e.summary or e.content} ({', '.join(e.emotions)})"
+        f"- [{e.created_at.strftime('%m-%d')}] {e.summary or e.content} ({', '.join(e.emotions)}, {e.importance:.0%})"
         for e in events
     ) if events else "近期无明显事件"
 
     prompt = REFLECTION_PROMPT.format(
+        weekly_summaries=weekly_summaries,
         recent_events=events_text,
+        diary_summaries=diary_summaries,
         current_weights=json.dumps(weights.weights, ensure_ascii=False),
     )
 
     response = await call_cheap_llm(
         [{"role": "user", "content": prompt}],
-        temperature=0.3,
+        temperature=0.2,
         max_tokens=512,
     )
 
@@ -119,16 +157,17 @@ async def run_reflection(user_id: str) -> dict | None:
     except (json.JSONDecodeError, IndexError):
         return None
 
-    # 更新权重
+    # 更新权重（clamp 每个维度与之前的差值 ≤ 0.02）
     new_weights_data = data.get("new_weights", {})
     if new_weights_data:
-        for dim in PersonalityWeights.__module__:
-            pass
-        weights.weights = {
-            k: max(0.0, min(1.0, v))
-            for k, v in new_weights_data.items()
-            if k in weights.weights
-        }
+        for dim in weights.weights:
+            if dim in new_weights_data:
+                old_val = weights.weights[dim]
+                new_val = max(0.0, min(1.0, new_weights_data[dim]))
+                # 强制限制单次调整幅度
+                delta = new_val - old_val
+                delta = max(-0.02, min(0.02, delta))
+                weights.weights[dim] = old_val + delta
         save_weights(user_id, weights)
 
     # 保存洞察到 companion notes
@@ -136,29 +175,15 @@ async def run_reflection(user_id: str) -> dict | None:
     if insight:
         try:
             patch_core_memory(user_id, MemoryPatch(
-                action="add", target="notes", content=f"[反思] {insight}"
+                action="add", target="notes", content=f"[周反思] {insight}"
             ))
         except ValueError:
-            pass  # 容量不足，忽略
+            pass
 
     # 记录反思日期
     save_last_reflection_date(user_id, date.today().isoformat())
 
+    # 保存权重快照
+    save_personality_snapshot(user_id, weights.weights, summary=data.get("analysis", ""))
+
     return {"analysis": data.get("analysis", ""), "insight": insight, "new_weights": weights.weights}
-
-
-def should_trigger_reflection(user_id: str) -> bool:
-    """检查是否应该触发 Reflection"""
-    turn_count = load_turn_counter(user_id)
-    last_date = load_last_reflection_date(user_id)
-    today = date.today().isoformat()
-
-    # 每 N 轮触发
-    if turn_count > 0 and turn_count % settings.reflection_turn_interval == 0:
-        return True
-
-    # 每日首次对话触发
-    if last_date != today:
-        return True
-
-    return False

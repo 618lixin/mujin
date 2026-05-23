@@ -5,11 +5,8 @@ from datetime import datetime
 from src.config import settings
 from src.services.llm import stream_llm
 from src.services.memory import load_core_memory, format_memory_for_prompt
-from src.services.personality_service import load_weights, save_weights, load_turn_counter, save_turn_counter
+from src.services.personality_service import load_weights, load_turn_counter, save_turn_counter
 from src.services.personality_engine import (
-    apply_reinforcement,
-    get_compensation,
-    check_analytical_boost,
     should_trigger_reflection,
     run_reflection,
 )
@@ -84,7 +81,13 @@ async def post_chat(
     user_id: str, user_message: str, ai_reply: str,
     history: list[dict], base_weights: PersonalityWeights,
 ) -> dict:
-    """对话后处理：情绪识别、事件写入、权重调整、Reflection、日记累积"""
+    """
+    对话后管线（沉淀式，不直接改权重）：
+    1. 保存对话历史
+    2. 情绪识别 → 写入事件记忆（沉淀层）
+    3. 累积日记数据（沉淀层）
+    4. Reflection 检查（每周一次，唯一改权重的地方）
+    """
     history.append({"role": "user", "content": user_message})
     history.append({"role": "assistant", "content": ai_reply})
     _save_history(user_id, history)
@@ -92,6 +95,7 @@ async def post_chat(
     turn_count = load_turn_counter(user_id) + 1
     save_turn_counter(user_id, turn_count)
 
+    # 情绪识别 → 事件沉淀（不改权重）
     emotion_result = await extract_emotion(user_message, ai_reply)
 
     if emotion_result.importance >= 0.6 and emotion_result.event_type:
@@ -104,18 +108,13 @@ async def post_chat(
         )
         add_event(user_id, event)
 
-    if emotion_result.emotions:
-        apply_reinforcement(base_weights, emotion_result.emotions)
-    analytical = check_analytical_boost(user_message)
-    for dim, delta in analytical.items():
-        base_weights.adjust(dim, delta)
-    save_weights(user_id, base_weights)
+    # 日记数据累积
+    accumulate_day_data(user_id, emotion_result)
 
+    # Reflection：每周一次，唯一修改权重的地方
     reflection_result = None
     if should_trigger_reflection(user_id):
         reflection_result = await run_reflection(user_id)
-
-    accumulate_day_data(user_id, emotion_result)
 
     return {
         "emotion": emotion_result.to_dict(),

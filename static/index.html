@@ -7,327 +7,294 @@
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #f5f5f5; height: 100vh; display: flex; }
-
-  /* 侧边栏 */
-  .sidebar { width: 260px; background: #1a1a2e; color: #e0e0e0; display: flex; flex-direction: column; padding: 20px 0; }
-  .sidebar h1 { font-size: 18px; padding: 0 20px 20px; border-bottom: 1px solid #333; color: #fff; }
-  .sidebar nav a { display: block; padding: 12px 20px; color: #aaa; text-decoration: none; cursor: pointer; transition: all .2s; }
+  .sidebar { width: 240px; background: #1a1a2e; color: #e0e0e0; display: flex; flex-direction: column; padding: 20px 0; }
+  .sidebar h1 { font-size: 16px; padding: 0 20px 20px; border-bottom: 1px solid #333; color: #fff; }
+  .sidebar nav a { display: block; padding: 10px 20px; color: #aaa; text-decoration: none; cursor: pointer; font-size: 13px; }
   .sidebar nav a:hover, .sidebar nav a.active { color: #fff; background: #16213e; }
-  .sidebar .weights { margin-top: auto; padding: 16px 20px; font-size: 12px; border-top: 1px solid #333; }
-  .sidebar .weights .bar { height: 6px; background: #333; border-radius: 3px; margin: 3px 0 8px; }
-  .sidebar .weights .bar-fill { height: 100%; background: #6c63ff; border-radius: 3px; transition: width .3s; }
-  .sidebar .weights .row { display: flex; justify-content: space-between; color: #888; }
-
-  /* 主区域 */
+  .sidebar .weights { margin-top: auto; padding: 12px 20px; font-size: 11px; border-top: 1px solid #333; }
+  .sidebar .weights .bar { height: 4px; background: #333; border-radius: 2px; margin: 2px 0 6px; }
+  .sidebar .weights .bar-fill { height: 100%; background: #6c63ff; border-radius: 2px; }
+  .sidebar .weights .row { display: flex; justify-content: space-between; color: #777; font-size: 10px; }
   .main { flex: 1; display: flex; flex-direction: column; max-height: 100vh; }
-  .topbar { padding: 16px 24px; background: #fff; border-bottom: 1px solid #e0e0e0; font-size: 14px; color: #666; }
-
-  /* 聊天 */
-  #chat-panel, #init-panel, #memory-panel { display: none; flex: 1; flex-direction: column; }
-  #chat-panel.active, #init-panel.active, #memory-panel.active { display: flex; }
-
+  .topbar { padding: 14px 24px; background: #fff; border-bottom: 1px solid #e0e0e0; font-size: 14px; color: #666; }
+  .panel { display: none; flex: 1; flex-direction: column; }
+  .panel.active { display: flex; }
   .messages { flex: 1; overflow-y: auto; padding: 24px; }
-  .msg { max-width: 70%; margin-bottom: 16px; }
+  .msg { max-width: 70%; margin-bottom: 14px; }
   .msg.user { margin-left: auto; }
-  .msg .bubble { padding: 12px 16px; border-radius: 16px; line-height: 1.6; font-size: 14px; white-space: pre-wrap; }
+  .msg .bubble { padding: 10px 14px; border-radius: 14px; line-height: 1.6; font-size: 14px; white-space: pre-wrap; }
   .msg.user .bubble { background: #6c63ff; color: #fff; border-bottom-right-radius: 4px; }
   .msg.ai .bubble { background: #fff; color: #333; border-bottom-left-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,.1); }
-  .msg .meta { font-size: 11px; color: #999; margin-top: 4px; }
+  .msg .meta { font-size: 11px; color: #999; margin-top: 3px; }
   .msg.user .meta { text-align: right; }
-
-  .input-area { padding: 16px 24px; background: #fff; border-top: 1px solid #e0e0e0; display: flex; gap: 12px; }
-  .input-area textarea { flex: 1; border: 1px solid #ddd; border-radius: 12px; padding: 12px 16px; font-size: 14px; resize: none; outline: none; font-family: inherit; }
+  .input-area { padding: 14px 24px; background: #fff; border-top: 1px solid #e0e0e0; display: flex; gap: 10px; }
+  .input-area textarea { flex: 1; border: 1px solid #ddd; border-radius: 10px; padding: 10px 14px; font-size: 14px; resize: none; outline: none; font-family: inherit; }
   .input-area textarea:focus { border-color: #6c63ff; }
-  .input-area button { background: #6c63ff; color: #fff; border: none; border-radius: 12px; padding: 0 24px; font-size: 14px; cursor: pointer; transition: background .2s; }
+  .input-area button { background: #6c63ff; color: #fff; border: none; border-radius: 10px; padding: 0 20px; font-size: 14px; cursor: pointer; }
   .input-area button:hover { background: #5a52d5; }
   .input-area button:disabled { background: #aaa; cursor: not-allowed; }
-
-  /* 初始化 */
-  #init-panel { padding: 40px; overflow-y: auto; align-items: center; }
-  #init-panel h2 { font-size: 24px; margin-bottom: 8px; color: #333; }
-  #init-panel p { color: #888; margin-bottom: 32px; }
-  .form-group { margin-bottom: 20px; width: 100%; max-width: 480px; }
-  .form-group label { display: block; font-size: 13px; color: #666; margin-bottom: 6px; }
-  .form-group select, .form-group input { width: 100%; padding: 10px 14px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; outline: none; }
-  .form-group select:focus, .form-group input:focus { border-color: #6c63ff; }
-  .form-group .hint { font-size: 12px; color: #aaa; margin-top: 4px; }
-  #init-panel button { background: #6c63ff; color: #fff; border: none; border-radius: 12px; padding: 14px 48px; font-size: 16px; cursor: pointer; margin-top: 12px; }
-
-  /* 记忆面板 */
-  #memory-panel { padding: 24px; overflow-y: auto; }
-  .card { background: #fff; border-radius: 12px; padding: 20px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
-  .card h3 { font-size: 16px; margin-bottom: 12px; color: #333; }
-  .card pre { background: #f8f8f8; padding: 12px; border-radius: 8px; font-size: 13px; white-space: pre-wrap; color: #555; }
-  .card .capacity { font-size: 12px; color: #999; margin-top: 8px; }
-  .event-item { padding: 10px 0; border-bottom: 1px solid #f0f0f0; font-size: 13px; }
+  /* scroll panels */
+  .scroll-panel { flex: 1; overflow-y: auto; padding: 24px; }
+  .card { background: #fff; border-radius: 10px; padding: 16px; margin-bottom: 14px; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+  .card h3 { font-size: 14px; margin-bottom: 10px; color: #333; display: flex; justify-content: space-between; align-items: center; }
+  .card pre { background: #f8f8f8; padding: 10px; border-radius: 6px; font-size: 12px; white-space: pre-wrap; color: #555; max-height: 300px; overflow-y: auto; }
+  .card .capacity { font-size: 11px; color: #999; margin-top: 6px; }
+  .btn { background: #6c63ff; color: #fff; border: none; border-radius: 6px; padding: 6px 14px; font-size: 12px; cursor: pointer; }
+  .btn:hover { background: #5a52d5; }
+  .btn-sm { padding: 4px 10px; font-size: 11px; }
+  .btn-danger { background: #e53935; }
+  .btn-danger:hover { background: #c62828; }
+  .btn-outline { background: transparent; color: #6c63ff; border: 1px solid #6c63ff; }
+  textarea.edit-area { width: 100%; border: 1px solid #ddd; border-radius: 6px; padding: 8px; font-size: 12px; font-family: inherit; min-height: 80px; resize: vertical; outline: none; }
+  textarea.edit-area:focus { border-color: #6c63ff; }
+  .event-item { padding: 8px 0; border-bottom: 1px solid #f0f0f0; font-size: 12px; display: flex; justify-content: space-between; align-items: center; }
   .event-item:last-child { border-bottom: none; }
-  .event-item .tags span { display: inline-block; background: #ede7f6; color: #5e35b1; padding: 2px 8px; border-radius: 10px; font-size: 11px; margin-right: 4px; }
-  .event-item .imp { color: #e53935; font-weight: 600; }
-
+  .tag { display: inline-block; background: #ede7f6; color: #5e35b1; padding: 1px 6px; border-radius: 8px; font-size: 10px; margin-right: 3px; }
+  .imp { color: #e53935; font-weight: 600; font-size: 11px; }
+  .diary-item { padding: 10px; border: 1px solid #eee; border-radius: 8px; margin-bottom: 8px; cursor: pointer; }
+  .diary-item:hover { background: #f8f8ff; }
+  .diary-item .date { font-weight: 600; font-size: 13px; color: #333; }
+  .diary-item .summary { font-size: 12px; color: #888; margin-top: 4px; }
+  .history-row { padding: 10px; border-bottom: 1px solid #f0f0f0; }
+  .history-row:last-child { border-bottom: none; }
+  .history-row .time { font-size: 11px; color: #999; }
+  .history-row .bars { display: flex; gap: 3px; margin-top: 4px; }
+  .history-row .bars .mini-bar { width: 20px; background: #6c63ff; border-radius: 2px; }
+  .section-title { font-size: 15px; font-weight: 600; margin: 16px 0 10px; color: #333; }
+  .row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+  .row label { font-size: 12px; color: #666; min-width: 50px; }
+  .row input, .row select { flex: 1; padding: 6px 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 12px; }
+  #init-panel { padding: 40px; overflow-y: auto; align-items: center; }
+  #init-panel h2 { font-size: 22px; margin-bottom: 8px; color: #333; }
+  #init-panel p { color: #888; margin-bottom: 24px; }
+  .form-group { margin-bottom: 16px; width: 100%; max-width: 400px; }
+  .form-group label { display: block; font-size: 12px; color: #666; margin-bottom: 4px; }
+  .form-group select { width: 100%; padding: 8px 12px; border: 1px solid #ddd; border-radius: 6px; font-size: 13px; }
+  #init-panel button { background: #6c63ff; color: #fff; border: none; border-radius: 10px; padding: 12px 40px; font-size: 15px; cursor: pointer; margin-top: 8px; }
 </style>
 </head>
 <body>
-
 <div class="sidebar">
   <h1>Growth Companion</h1>
   <nav>
-    <a class="active" onclick="showPanel('chat')">💬 对话</a>
-    <a onclick="showPanel('memory')">🧠 记忆</a>
-    <a onclick="showPanel('init')">⚙️ 初始化</a>
+    <a class="active" onclick="showPanel('chat',this)">💬 对话</a>
+    <a onclick="showPanel('diary',this)">📖 日记</a>
+    <a onclick="showPanel('memory',this)">🧠 记忆</a>
+    <a onclick="showPanel('init',this)">⚙️ 初始化</a>
   </nav>
-  <div class="weights" id="weights-display">
-    <div style="color:#888;margin-bottom:8px;">人格权重</div>
-  </div>
+  <div class="weights" id="weights-display"><div style="color:#777;margin-bottom:6px;font-size:11px;">人格权重</div></div>
 </div>
 
 <div class="main">
-  <div class="topbar" id="topbar">对话 · Growth Companion</div>
+  <div class="topbar" id="topbar">对话</div>
 
-  <!-- 聊天面板 -->
-  <div id="chat-panel" class="active">
+  <!-- 聊天 -->
+  <div id="chat-panel" class="panel active">
     <div class="messages" id="messages"></div>
     <div class="input-area">
-      <textarea id="input" rows="1" placeholder="说点什么..." onkeydown="handleKey(event)"></textarea>
+      <textarea id="input" rows="1" placeholder="说点什么..." onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendMessage()}"></textarea>
       <button id="send-btn" onclick="sendMessage()">发送</button>
     </div>
   </div>
 
-  <!-- 初始化面板 -->
-  <div id="init-panel">
-    <h2>开始你的成长之旅</h2>
-    <p>回答几个简单的问题，让我更了解你</p>
-    <div class="form-group">
-      <label>你的 MBTI 类型</label>
-      <select id="f-mbti">
-        <option value="">不确定</option>
-        <option>INTJ</option><option>INTP</option><option>ENTJ</option><option>ENTP</option>
-        <option>INFJ</option><option selected>INFP</option><option>ENFJ</option><option>ENFP</option>
-        <option>ISTJ</option><option>ISFJ</option><option>ESTJ</option><option>ESFJ</option>
-        <option>ISTP</option><option>ISFP</option><option>ESTP</option><option>ESFP</option>
-      </select>
+  <!-- 日记 -->
+  <div id="diary-panel" class="panel">
+    <div class="scroll-panel">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+        <h2 style="font-size:18px">📖 日记与周报</h2>
+        <div style="display:flex;gap:6px">
+          <button class="btn btn-sm" onclick="batchGenerate()">补生成日记</button>
+          <button class="btn btn-sm btn-outline" onclick="genWeekly()">生成本周总结</button>
+        </div>
+      </div>
+      <div class="section-title">周成长总结</div>
+      <div id="weekly-list">加载中...</div>
+      <div class="section-title" style="margin-top:20px">日记列表</div>
+      <div id="diary-list">加载中...</div>
     </div>
-    <div class="form-group">
-      <label>情绪表达方式</label>
-      <select id="f-emotion">
-        <option value="内化型">内化型 — 习惯自己消化情绪</option>
-        <option value="外化型">外化型 — 喜欢说出来</option>
-        <option value="混合型">混合型 — 看情况</option>
-      </select>
-    </div>
-    <div class="form-group">
-      <label>希望 AI 的建议力度</label>
-      <select id="f-advice">
-        <option value="温和引导">温和引导 — 多倾听少建议</option>
-        <option value="适度建议">适度建议 — 该说的时候说</option>
-        <option value="直接建议">直接建议 — 给我明确方向</option>
-      </select>
-    </div>
-    <div class="form-group">
-      <label>依恋风格</label>
-      <select id="f-attachment">
-        <option value="焦虑型">焦虑型 — 害怕被抛弃</option>
-        <option value="回避型">回避型 — 不太依赖别人</option>
-        <option value="安全型">安全型 — 相对平衡</option>
-        <option value="不确定">不确定</option>
-      </select>
-    </div>
-    <button onclick="doInit()">开始</button>
   </div>
 
-  <!-- 记忆面板 -->
-  <div id="memory-panel">
-    <div class="card">
-      <h3>用户画像</h3>
-      <pre id="mem-profile">加载中...</pre>
-      <div class="capacity" id="mem-profile-cap"></div>
+  <!-- 记忆 -->
+  <div id="memory-panel" class="panel">
+    <div class="scroll-panel">
+      <!-- 核心记忆 -->
+      <div class="card">
+        <h3>用户画像 <button class="btn btn-sm" onclick="editProfile()">编辑</button></h3>
+        <pre id="mem-profile">加载中...</pre>
+        <div class="capacity" id="mem-profile-cap"></div>
+        <div id="profile-edit" style="display:none">
+          <textarea class="edit-area" id="profile-textarea"></textarea>
+          <div style="margin-top:6px;display:flex;gap:6px">
+            <button class="btn btn-sm" onclick="saveProfile()">保存</button>
+            <button class="btn btn-sm btn-outline" onclick="cancelEdit('profile-edit')">取消</button>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <h3>AI 笔记 <button class="btn btn-sm" onclick="editNotes()">编辑</button></h3>
+        <pre id="mem-notes">加载中...</pre>
+        <div class="capacity" id="mem-notes-cap"></div>
+        <div id="notes-edit" style="display:none">
+          <textarea class="edit-area" id="notes-textarea"></textarea>
+          <div style="margin-top:6px;display:flex;gap:6px">
+            <button class="btn btn-sm" onclick="saveNotes()">保存</button>
+            <button class="btn btn-sm btn-outline" onclick="cancelEdit('notes-edit')">取消</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 事件 -->
+      <div class="card">
+        <h3>事件记忆</h3>
+        <div id="mem-events">加载中...</div>
+      </div>
+
+      <!-- 人格历史 -->
+      <div class="card">
+        <h3>人格演化历史</h3>
+        <div id="personality-history">加载中...</div>
+      </div>
+
+      <!-- 人生章节 -->
+      <div class="card">
+        <h3>人生章节 <button class="btn btn-sm btn-outline" onclick="genChapter()">生成章节</button></h3>
+        <div id="gen-chapter-form" style="display:none;margin-bottom:10px">
+          <div class="row"><label>开始</label><input type="date" id="ch-start"></div>
+          <div class="row"><label>结束</label><input type="date" id="ch-end"></div>
+          <div class="row"><label>标题</label><input type="text" id="ch-title" placeholder="可选"></div>
+          <button class="btn btn-sm" onclick="doGenChapter()">生成</button>
+        </div>
+        <div id="chapters-list">加载中...</div>
+      </div>
     </div>
-    <div class="card">
-      <h3>AI 笔记</h3>
-      <pre id="mem-notes">加载中...</pre>
-      <div class="capacity" id="mem-notes-cap"></div>
+  </div>
+
+  <!-- 初始化 -->
+  <div id="init-panel" class="panel" style="align-items:center">
+    <h2>开始你的成长之旅</h2>
+    <p>回答几个简单的问题</p>
+    <div class="form-group"><label>MBTI 类型</label>
+      <select id="f-mbti"><option value="">不确定</option><option>INTJ</option><option>INTP</option><option>ENTJ</option><option>ENTP</option><option>INFJ</option><option selected>INFP</option><option>ENFJ</option><option>ENFP</option><option>ISTJ</option><option>ISFJ</option><option>ESTJ</option><option>ESFJ</option><option>ISTP</option><option>ISFP</option><option>ESTP</option><option>ESFP</option></select>
     </div>
-    <div class="card">
-      <h3>事件记忆</h3>
-      <div id="mem-events">加载中...</div>
-    </div>
+    <div class="form-group"><label>情绪表达</label><select id="f-emotion"><option value="内化型">内化型</option><option value="外化型">外化型</option><option value="混合型">混合型</option></select></div>
+    <div class="form-group"><label>建议力度</label><select id="f-advice"><option value="温和引导">温和引导</option><option value="适度建议">适度建议</option><option value="直接建议">直接建议</option></select></div>
+    <div class="form-group"><label>依恋风格</label><select id="f-attachment"><option value="焦虑型">焦虑型</option><option value="回避型">回避型</option><option value="安全型">安全型</option><option value="不确定">不确定</option></select></div>
+    <button onclick="doInit()">开始</button>
   </div>
 </div>
 
 <script>
-const API = 'http://127.0.0.1:8000';
-const userId = 'default';
+const API='http://127.0.0.1:8000',userId='default';
+const panels=['chat','diary','memory','init'];
+const titles={chat:'对话',diary:'日记与周报',memory:'记忆管理',init:'初始化'};
 
-// Panel switching
-function showPanel(name) {
-  document.querySelectorAll('.sidebar nav a').forEach(a => a.classList.remove('active'));
-  event.target.classList.add('active');
-  document.getElementById('chat-panel').classList.remove('active');
-  document.getElementById('init-panel').classList.remove('active');
-  document.getElementById('memory-panel').classList.remove('active');
-  document.getElementById(name + '-panel').classList.add('active');
-  document.getElementById('topbar').textContent =
-    name === 'chat' ? '对话 · Growth Companion' :
-    name === 'memory' ? '记忆 · Growth Companion' :
-    '初始化 · Growth Companion';
-  if (name === 'memory') loadMemory();
+function showPanel(name,el){
+  document.querySelectorAll('.sidebar nav a').forEach(a=>a.classList.remove('active'));
+  if(el)el.classList.add('active');
+  panels.forEach(p=>document.getElementById(p+'-panel').classList.remove('active'));
+  document.getElementById(name+'-panel').classList.add('active');
+  document.getElementById('topbar').textContent=titles[name];
+  if(name==='diary')loadDiary();
+  if(name==='memory')loadMemory();
 }
 
-// Init
-async function doInit() {
-  const body = {
-    user_id: userId,
-    mbti: document.getElementById('f-mbti').value || null,
-    emotion_style: document.getElementById('f-emotion').value,
-    advice_preference: document.getElementById('f-advice').value,
-    attachment_style: document.getElementById('f-attachment').value,
-  };
-  const res = await fetch(`${API}/api/init`, {
-    method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)
-  });
-  const data = await res.json();
-  if (data.weights) {
-    renderWeights(data.weights);
-    alert('初始化成功！');
-    showPanel('chat');
-    document.querySelector('.sidebar nav a').classList.remove('active');
-    document.querySelector('.sidebar nav a').classList.add('active');
-  }
+async function doInit(){
+  const r=await fetch(`${API}/api/init`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({user_id:userId,mbti:document.getElementById('f-mbti').value||null,emotion_style:document.getElementById('f-emotion').value,advice_preference:document.getElementById('f-advice').value,attachment_style:document.getElementById('f-attachment').value})});
+  const d=await r.json();
+  if(d.weights){renderWeights(d.weights);alert('初始化成功！');showPanel('chat',document.querySelector('.sidebar nav a'));}
 }
 
 // Chat
-async function sendMessage() {
-  const input = document.getElementById('input');
-  const text = input.value.trim();
-  if (!text) return;
-  input.value = '';
-
-  appendMsg('user', text);
-
-  const btn = document.getElementById('send-btn');
-  btn.disabled = true;
-  const msgEl = appendMsg('ai', '');
-  const bubble = msgEl.querySelector('.bubble');
-
-  try {
-    const res = await fetch(`${API}/api/chat/stream`, {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ message: text, user_id: userId })
-    });
-    const reader = res.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = '';
-    let meta = [];
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split('\n');
-      buffer = lines.pop();
-      for (const line of lines) {
-        if (!line.startsWith('data: ')) continue;
-        try {
-          const data = JSON.parse(line.slice(6));
-          if (data.type === 'token') {
-            bubble.textContent += data.content;
-            scrollBottom();
-          } else if (data.type === 'done') {
-            const m = data.meta;
-            if (m.emotion?.emotions?.length) meta.push('情绪: ' + m.emotion.emotions.join(', '));
-            if (m.emotion?.importance >= 0.6) meta.push('事件已记录');
-            if (m.reflection) meta.push('🔄 反思完成');
-            if (meta.length) msgEl.querySelector('.meta').textContent = meta.join(' · ');
-            if (m.reflection?.new_weights) renderWeights(m.reflection.new_weights);
-          } else if (data.type === 'error') {
-            bubble.textContent += '\n\n[错误] ' + data.message;
-          }
-        } catch {}
+async function sendMessage(){
+  const input=document.getElementById('input'),text=input.value.trim();
+  if(!text)return;input.value='';
+  appendMsg('user',text);
+  const btn=document.getElementById('send-btn');btn.disabled=true;
+  const el=appendMsg('ai',''),bubble=el.querySelector('.bubble');
+  try{
+    const res=await fetch(`${API}/api/chat/stream`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:text,user_id:userId})});
+    const reader=res.body.getReader(),decoder=new TextDecoder();
+    let buf='',meta=[];
+    while(true){
+      const{done,value}=await reader.read();if(done)break;
+      buf+=decoder.decode(value,{stream:true});
+      const lines=buf.split('\n');buf=lines.pop();
+      for(const line of lines){
+        if(!line.startsWith('data: '))continue;
+        try{const d=JSON.parse(line.slice(6));
+          if(d.type==='token'){bubble.textContent+=d.content;document.getElementById('messages').scrollTop=99999;}
+          else if(d.type==='done'){const m=d.meta;if(m.emotion?.emotions?.length)meta.push('情绪: '+m.emotion.emotions.join(', '));if(m.emotion?.importance>=0.6)meta.push('事件已记录');if(m.reflection)meta.push('🔄 反思');if(meta.length)el.querySelector('.meta').textContent=meta.join(' · ');if(m.reflection?.new_weights)renderWeights(m.reflection.new_weights);}
+          else if(d.type==='error'){bubble.textContent+='\n\n[错误] '+d.message;}
+        }catch{}
       }
     }
-  } catch (e) {
-    bubble.textContent = '连接失败：' + e.message;
-  }
-  btn.disabled = false;
-  scrollBottom();
+  }catch(e){bubble.textContent='连接失败：'+e.message;}
+  btn.disabled=false;document.getElementById('messages').scrollTop=99999;
 }
+function appendMsg(role,html){const d=document.createElement('div');d.className=`msg ${role}`;d.innerHTML=`<div class="bubble">${html}</div><div class="meta"></div>`;document.getElementById('messages').appendChild(d);document.getElementById('messages').scrollTop=99999;return d;}
 
-function appendMsg(role, html) {
-  const div = document.createElement('div');
-  div.className = `msg ${role}`;
-  div.innerHTML = `<div class="bubble">${html}</div><div class="meta"></div>`;
-  document.getElementById('messages').appendChild(div);
-  scrollBottom();
-  return div;
+// Diary
+async function loadDiary(){
+  // 周报
+  try{const r=await fetch(`${API}/api/summary/weekly?user_id=${userId}`);const list=await r.json();
+    document.getElementById('weekly-list').innerHTML=list.length?list.map(s=>`<div class="diary-item" onclick="fetch('${API}/api/summary/weekly/${s.year}/${s.week}?user_id=${userId}').then(r=>r.json()).then(d=>alert(d.content))"><span class="date">${s.year} W${String(s.week).padStart(2,'0')}</span><span class="summary"> — ${s.title}</span></div>`).join(''):'暂无周报';
+  }catch{document.getElementById('weekly-list').textContent='加载失败';}
+  // 日记
+  try{const r=await fetch(`${API}/api/diary?user_id=${userId}`);const list=await r.json();
+    document.getElementById('diary-list').innerHTML=list.length?list.map(d=>`<div class="diary-item" onclick="fetch('${API}/api/diary/${d.date}?user_id=${userId}').then(r=>r.json()).then(d=>alert(d.content))"><span class="date">${d.date}</span><span class="summary"> — ${d.summary}</span></div>`).join(''):'暂无日记';
+  }catch{document.getElementById('diary-list').textContent='加载失败';}
 }
-
-function scrollBottom() {
-  const m = document.getElementById('messages');
-  m.scrollTop = m.scrollHeight;
-}
-
-function handleKey(e) {
-  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
-}
+async function batchGenerate(){await fetch(`${API}/api/diary/batch-generate`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({start_date:'2026-05-20',end_date:new Date().toISOString().slice(0,10),user_id:userId})});loadDiary();}
+async function genWeekly(){const now=new Date(),start=new Date(now);start.setDate(start.getDate()-start.getDay()+1);const end=new Date(start);end.setDate(end.getDate()+6);const r=await fetch(`${API}/api/summary/weekly`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({year:now.getFullYear(),week:getWeekNumber(now),user_id:userId})});const d=await r.json();if(d.content)alert(d.content);else alert(d.detail||'生成失败');loadDiary();}
+function getWeekNumber(d){const onejan=new Date(d.getFullYear(),0,1);return Math.ceil(((d-onejan)/86400000+onejan.getDay()+1)/7);}
 
 // Memory
-async function loadMemory() {
-  try {
-    const res = await fetch(`${API}/api/memory/core?user_id=${userId}`);
-    const data = await res.json();
-    document.getElementById('mem-profile').textContent = data.profile.content || '(空)';
-    document.getElementById('mem-profile-cap').textContent =
-      `${data.profile.chars} / ${data.profile.max_chars} 字符 (${data.profile.pct}%)`;
-    document.getElementById('mem-notes').textContent = data.notes.content || '(空)';
-    document.getElementById('mem-notes-cap').textContent =
-      `${data.notes.chars} / ${data.notes.max_chars} 字符 (${data.notes.pct}%)`;
-
-    const eRes = await fetch(`${API}/api/memory/events?user_id=${userId}&limit=20`);
-    const events = await eRes.json();
-    const el = document.getElementById('mem-events');
-    if (!events.length) { el.textContent = '暂无事件记录'; return; }
-    el.innerHTML = events.map(e => `
-      <div class="event-item">
-        <strong>${e.content}</strong>
-        <div style="margin-top:4px">
-          ${e.emotions.map(t => `<span>${t}</span>`).join('')}
-          <span class="imp">${(e.importance * 100).toFixed(0)}%</span>
-          <span style="color:#aaa;margin-left:8px">${e.event_type || ''}</span>
-          <span style="float:right;color:#aaa">${new Date(e.created_at).toLocaleDateString()}</span>
-        </div>
-      </div>
-    `).join('');
-  } catch (e) {
-    document.getElementById('mem-profile').textContent = '加载失败';
-  }
+async function loadMemory(){
+  try{const r=await fetch(`${API}/api/memory/core?user_id=${userId}`);const d=await r.json();
+    document.getElementById('mem-profile').textContent=d.profile.content||'(空)';
+    document.getElementById('mem-profile-cap').textContent=`${d.profile.chars}/${d.profile.max_chars} (${d.profile.pct}%)`;
+    document.getElementById('mem-notes').textContent=d.notes.content||'(空)';
+    document.getElementById('mem-notes-cap').textContent=`${d.notes.chars}/${d.notes.max_chars} (${d.notes.pct}%)`;
+  }catch{}
+  try{const r=await fetch(`${API}/api/memory/events?user_id=${userId}&limit=20`);const events=await r.json();
+    document.getElementById('mem-events').innerHTML=events.length?events.map(e=>`<div class="event-item"><div><strong>${e.content}</strong><div style="margin-top:3px">${e.emotions.map(t=>`<span class="tag">${t}</span>`).join('')}<span class="imp">${(e.importance*100).toFixed(0)}%</span> <span style="color:#aaa">${e.event_type||''} · ${new Date(e.created_at).toLocaleDateString()}</span></div></div><button class="btn btn-sm btn-danger" onclick="delEvent('${e.id}')">删</button></div>`).join(''):'暂无事件';
+  }catch{}
+  try{const r=await fetch(`${API}/api/personality/history?user_id=${userId}`);const hist=await r.json();
+    document.getElementById('personality-history').innerHTML=hist.length?hist.map(h=>`<div class="history-row"><div class="time">${new Date(h.created_at).toLocaleString()} ${h.summary?'— '+h.summary:''}</div><div class="bars">${Object.entries(h.weights).map(([k,v])=>`<div style="text-align:center"><div class="mini-bar" style="height:${v*30}px;background:hsl(${v*260},70%,55%)"></div><div style="font-size:9px;color:#aaa">${k}</div></div>`).join('')}</div></div>`).join(''):'暂无历史';
+  }catch{}
+  try{const r=await fetch(`${API}/api/chapters?user_id=${userId}`);const chs=await r.json();
+    document.getElementById('chapters-list').innerHTML=chs.length?chs.map(c=>`<div class="diary-item" onclick="fetch('${API}/api/chapters/${c.filename}?user_id=${userId}').then(r=>r.json()).then(d=>alert(d.content))"><span class="date">${c.title}</span></div>`).join(''):'暂无章节';
+  }catch{}
+}
+function editProfile(){document.getElementById('profile-edit').style.display='block';document.getElementById('profile-textarea').value=document.getElementById('mem-profile').textContent;}
+function editNotes(){document.getElementById('notes-edit').style.display='block';document.getElementById('notes-textarea').value=document.getElementById('mem-notes').textContent;}
+function cancelEdit(id){document.getElementById(id).style.display='none';}
+async function saveProfile(){
+  const c=document.getElementById('profile-textarea').value;
+  await fetch(`${API}/api/memory/core?user_id=${userId}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'replace',target:'profile',old_text:document.getElementById('mem-profile').textContent,content:c})});
+  cancelEdit('profile-edit');loadMemory();
+}
+async function saveNotes(){
+  const c=document.getElementById('notes-textarea').value;
+  await fetch(`${API}/api/memory/core?user_id=${userId}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'replace',target:'notes',old_text:document.getElementById('mem-notes').textContent,content:c})});
+  cancelEdit('notes-edit');loadMemory();
+}
+async function delEvent(id){await fetch(`${API}/api/memory/events/${id}?user_id=${userId}`,{method:'DELETE'});loadMemory();}
+function genChapter(){document.getElementById('gen-chapter-form').style.display=document.getElementById('gen-chapter-form').style.display==='none'?'block':'none';}
+async function doGenChapter(){
+  const s=document.getElementById('ch-start').value,e=document.getElementById('ch-end').value,t=document.getElementById('ch-title').value;
+  if(!s||!e){alert('请选择日期范围');return;}
+  const r=await fetch(`${API}/api/chapters/generate`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({start_date:s,end_date:e,title:t||null,user_id:userId})});
+  const d=await r.json();if(d.content)alert(d.content);else alert(d.detail||'生成失败');
+  document.getElementById('gen-chapter-form').style.display='none';loadMemory();
 }
 
 // Weights
-async function loadWeights() {
-  try {
-    const res = await fetch(`${API}/api/personality?user_id=${userId}`);
-    const data = await res.json();
-    renderWeights(data.weights);
-  } catch {}
-}
+async function loadWeights(){try{const r=await fetch(`${API}/api/personality?user_id=${userId}`);const d=await r.json();renderWeights(d.weights);}catch{}}
+function renderWeights(w){document.getElementById('weights-display').innerHTML='<div style="color:#777;margin-bottom:6px;font-size:11px;">人格权重</div>'+Object.entries(w).map(([k,v])=>`<div class="row"><span>${k}</span><span>${v.toFixed(2)}</span></div><div class="bar"><div class="bar-fill" style="width:${v*100}%"></div></div>`).join('');}
 
-function renderWeights(w) {
-  const el = document.getElementById('weights-display');
-  el.innerHTML = '<div style="color:#888;margin-bottom:8px;">人格权重</div>' +
-    Object.entries(w).map(([k, v]) => `
-      <div class="row"><span>${k}</span><span>${v.toFixed(2)}</span></div>
-      <div class="bar"><div class="bar-fill" style="width:${v * 100}%"></div></div>
-    `).join('');
-}
-
-// Auto resize textarea
-const ta = document.getElementById('input');
-ta.addEventListener('input', () => {
-  ta.style.height = 'auto';
-  ta.style.height = Math.min(ta.scrollHeight, 120) + 'px';
-});
-
-// Init
+// Auto resize
+document.getElementById('input').addEventListener('input',function(){this.style.height='auto';this.style.height=Math.min(this.scrollHeight,100)+'px';});
 loadWeights();
 </script>
 </body>
