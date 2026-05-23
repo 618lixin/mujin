@@ -1,4 +1,5 @@
 import json
+import math
 import sqlite3
 from datetime import datetime
 from pathlib import Path
@@ -24,6 +25,10 @@ def _get_conn(user_id: str) -> sqlite3.Connection:
             emotions TEXT NOT NULL DEFAULT '[]',
             importance REAL NOT NULL,
             event_type TEXT,
+            strength REAL NOT NULL DEFAULT 1.0,
+            stability REAL NOT NULL DEFAULT 30.0,
+            recall_count INTEGER NOT NULL DEFAULT 0,
+            last_recalled_at TEXT,
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL
         )"""
@@ -67,6 +72,18 @@ def _get_conn(user_id: str) -> sqlite3.Connection:
             updated_at TEXT NOT NULL
         )"""
     )
+    # 向后兼容：为旧数据库添加新列
+    for col, col_def in [
+        ("strength", "REAL NOT NULL DEFAULT 1.0"),
+        ("stability", "REAL NOT NULL DEFAULT 30.0"),
+        ("recall_count", "INTEGER NOT NULL DEFAULT 0"),
+        ("last_recalled_at", "TEXT"),
+    ]:
+        try:
+            conn.execute(f"ALTER TABLE events ADD COLUMN {col} {col_def}")
+        except sqlite3.OperationalError:
+            pass  # 列已存在
+
     conn.commit()
     return conn
 
@@ -77,16 +94,22 @@ def init_db(user_id: str) -> None:
 
 
 def add_event(user_id: str, event: Event) -> None:
+    """添加事件，根据 importance 设置初始稳定性"""
+    event.stability = settings.forget_base_stability * (0.5 + event.importance)
     conn = _get_conn(user_id)
     conn.execute(
-        "INSERT INTO events (id, content, emotions, importance, event_type, created_at, updated_at) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO events (id, content, emotions, importance, event_type, "
+        "strength, stability, recall_count, created_at, updated_at) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (
             event.id,
             event.content,
             json.dumps(event.emotions),
             event.importance,
             event.event_type,
+            event.strength,
+            event.stability,
+            event.recall_count,
             event.created_at.isoformat(),
             event.updated_at.isoformat(),
         ),
@@ -102,7 +125,9 @@ def query_events(
     event_type: str | None = None,
     start_date: str | None = None,
     end_date: str | None = None,
+    min_strength: float = 0.0,
 ) -> list[Event]:
+    """查询事件，自动计算遗忘后的实际强度"""
     conn = _get_conn(user_id)
     conditions = ["importance >= ?"]
     params: list = [min_importance]
@@ -126,18 +151,28 @@ def query_events(
     ).fetchall()
     conn.close()
 
-    return [
-        Event(
+    events = []
+    for r in rows:
+        strength = _compute_strength(
+            created_at=r["created_at"],
+            stability=r["stability"] if r["stability"] else 30.0,
+        )
+        if strength < min_strength:
+            continue
+        events.append(Event(
             id=r["id"],
             content=r["content"],
             emotions=json.loads(r["emotions"]),
             importance=r["importance"],
             event_type=r["event_type"],
+            strength=strength,
+            stability=r["stability"] if r["stability"] else 30.0,
+            recall_count=r["recall_count"] if r["recall_count"] else 0,
+            last_recalled_at=datetime.fromisoformat(r["last_recalled_at"]) if r["last_recalled_at"] else None,
             created_at=datetime.fromisoformat(r["created_at"]),
             updated_at=datetime.fromisoformat(r["updated_at"]),
-        )
-        for r in rows
-    ]
+        ))
+    return events
 
 
 def delete_event(user_id: str, event_id: str) -> bool:
@@ -148,6 +183,76 @@ def delete_event(user_id: str, event_id: str) -> bool:
     conn.close()
     return deleted
 
+
+# ============ 遗忘曲线 ============
+
+def _compute_strength(created_at: str, stability: float) -> float:
+    """Ebbinghaus 遗忘曲线: strength = e^(-t/S)
+    t = 距创建的天数, S = 稳定天数
+    """
+    try:
+        created = datetime.fromisoformat(created_at)
+        days_elapsed = (datetime.now() - created).total_seconds() / 86400
+        return math.exp(-days_elapsed / stability)
+    except (ValueError, TypeError):
+        return 1.0
+
+
+def record_recall(user_id: str, event_id: str) -> None:
+    """复述效应：被检索到的事件稳定性增加 50%"""
+    conn = _get_conn(user_id)
+    row = conn.execute(
+        "SELECT stability, recall_count FROM events WHERE id = ?",
+        (event_id,),
+    ).fetchone()
+    if row:
+        new_stability = row["stability"] * (1 + settings.forget_recall_boost)
+        new_count = (row["recall_count"] or 0) + 1
+        conn.execute(
+            "UPDATE events SET stability=?, recall_count=?, last_recalled_at=?, updated_at=? WHERE id=?",
+            (new_stability, new_count, datetime.now().isoformat(),
+             datetime.now().isoformat(), event_id),
+        )
+        conn.commit()
+    conn.close()
+
+
+def decay_all_events(user_id: str) -> int:
+    """重新计算所有事件的强度。返回低于阈值的事件数"""
+    conn = _get_conn(user_id)
+    rows = conn.execute("SELECT id, created_at, stability FROM events").fetchall()
+    count = 0
+    for r in rows:
+        strength = _compute_strength(r["created_at"], r["stability"])
+        conn.execute(
+            "UPDATE events SET strength=?, updated_at=? WHERE id=?",
+            (strength, datetime.now().isoformat(), r["id"]),
+        )
+        if strength < settings.forget_min_strength:
+            count += 1
+    conn.commit()
+    conn.close()
+    return count
+
+
+def cleanup_forgotten_events(user_id: str, min_strength: float | None = None) -> int:
+    """删除强度低于阈值的事件，返回删除数量"""
+    threshold = min_strength or settings.forget_min_strength
+    conn = _get_conn(user_id)
+    rows = conn.execute("SELECT id, created_at, stability FROM events").fetchall()
+    to_delete = []
+    for r in rows:
+        strength = _compute_strength(r["created_at"], r["stability"])
+        if strength < threshold:
+            to_delete.append(r["id"])
+    for eid in to_delete:
+        conn.execute("DELETE FROM events WHERE id = ?", (eid,))
+    conn.commit()
+    conn.close()
+    return len(to_delete)
+
+
+# ============ 人格快照 ============
 
 def save_personality_snapshot(user_id: str, weights: dict, summary: str = "") -> None:
     """保存人格权重快照"""

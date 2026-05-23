@@ -83,6 +83,10 @@
     <a onclick="showPanel('init',this)">⚙️ 初始化</a>
   </nav>
   <div class="weights" id="weights-display"><div style="color:#777;margin-bottom:6px;font-size:11px;">人格权重</div></div>
+  <div id="pad-display" style="padding:12px 20px;border-top:1px solid #333;font-size:11px;color:#777">
+    <div style="margin-bottom:4px">情感状态</div>
+    <div id="pad-bars"></div>
+  </div>
 </div>
 
 <div class="main">
@@ -257,7 +261,7 @@ async function loadMemory(){
     document.getElementById('mem-notes-cap').textContent=`${d.notes.chars}/${d.notes.max_chars} (${d.notes.pct}%)`;
   }catch{}
   try{const r=await fetch(`${API}/api/memory/events?user_id=${userId}&limit=20`);const events=await r.json();
-    document.getElementById('mem-events').innerHTML=events.length?events.map(e=>`<div class="event-item"><div><strong>${e.content}</strong><div style="margin-top:3px">${e.emotions.map(t=>`<span class="tag">${t}</span>`).join('')}<span class="imp">${(e.importance*100).toFixed(0)}%</span> <span style="color:#aaa">${e.event_type||''} · ${new Date(e.created_at).toLocaleDateString()}</span></div></div><button class="btn btn-sm btn-danger" onclick="delEvent('${e.id}')">删</button></div>`).join(''):'暂无事件';
+    document.getElementById('mem-events').innerHTML=events.length?events.map(e=>{const s=e.strength!=null?e.strength:1;const sPct=(s*100).toFixed(0);const sColor=s>0.5?'#4caf50':s>0.2?'#ff9800':'#e53935';const faded=s<0.3?'opacity:0.5;':'';return`<div class="event-item" style="${faded}"><div><strong>${e.content}</strong><div style="margin-top:3px">${e.emotions.map(t=>`<span class="tag">${t}</span>`).join('')}<span class="imp">${(e.importance*100).toFixed(0)}%</span> <span style="color:${sColor};font-size:10px">记忆${sPct}%</span> <span style="color:#aaa">${e.event_type||''} · ${new Date(e.created_at).toLocaleDateString()}</span></div></div><button class="btn btn-sm btn-danger" onclick="delEvent('${e.id}')">删</button></div>`;}).join(''):'暂无事件';
   }catch{}
   try{const r=await fetch(`${API}/api/personality/history?user_id=${userId}`);const hist=await r.json();
     document.getElementById('personality-history').innerHTML=hist.length?hist.map(h=>`<div class="history-row"><div class="time">${new Date(h.created_at).toLocaleString()} ${h.summary?'— '+h.summary:''}</div><div class="bars">${Object.entries(h.weights).map(([k,v])=>`<div style="text-align:center"><div class="mini-bar" style="height:${v*30}px;background:hsl(${v*260},70%,55%)"></div><div style="font-size:9px;color:#aaa">${k}</div></div>`).join('')}</div></div>`).join(''):'暂无历史';
@@ -293,9 +297,41 @@ async function doGenChapter(){
 async function loadWeights(){try{const r=await fetch(`${API}/api/personality?user_id=${userId}`);const d=await r.json();renderWeights(d.weights);}catch{}}
 function renderWeights(w){document.getElementById('weights-display').innerHTML='<div style="color:#777;margin-bottom:6px;font-size:11px;">人格权重</div>'+Object.entries(w).map(([k,v])=>`<div class="row"><span>${k}</span><span>${v.toFixed(2)}</span></div><div class="bar"><div class="bar-fill" style="width:${v*100}%"></div></div>`).join('');}
 
+// PAD
+async function loadPAD(){try{const r=await fetch(`${API}/api/personality/pad?user_id=${userId}`);const d=await r.json();renderPAD(d.pleasure,d.arousal,d.dominance);}catch{}}
+function renderPAD(p,a,d){
+  const pColor=p>0.2?`hsl(${120+p*60},60%,50%)`:p<-0.2?`hsl(${0},70%,50%)`:`hsl(45,50%,50%)`;
+  const el=document.getElementById('pad-bars');
+  if(!el)return;
+  el.innerHTML=[
+    ['愉悦 P',((p+1)/2)*100,pColor],
+    ['激活 A',a*100,'#4fc3f7'],
+    ['支配 D',d*100,'#ab47bc'],
+  ].map(([label,pct,color])=>`<div style="margin-bottom:4px"><div style="display:flex;justify-content:space-between;color:#666;font-size:10px"><span>${label}</span><span>${pct.toFixed(0)}%</span></div><div class="bar"><div class="bar-fill" style="width:${pct}%;background:${color}"></div></div></div>`).join('');
+}
+
+// Heartbeat polling
+let heartbeatTimer=null;
+function startHeartbeatPolling(){
+  if(heartbeatTimer)return;
+  heartbeatTimer=setInterval(async()=>{
+    try{
+      const r=await fetch(`${API}/api/heartbeat?user_id=${userId}`);
+      const d=await r.json();
+      if(d.proactive_message){
+        const el=appendMsg('ai',d.proactive_message.message);
+        el.querySelector('.meta').textContent='💭 AI 主动发起';
+      }
+      if(d.pad)renderPAD(d.pad.pleasure,d.pad.arousal,d.pad.dominance);
+    }catch{}
+  },30000);
+}
+
 // Auto resize
 document.getElementById('input').addEventListener('input',function(){this.style.height='auto';this.style.height=Math.min(this.scrollHeight,100)+'px';});
 loadWeights();
+loadPAD();
+startHeartbeatPolling();
 </script>
 </body>
 </html>

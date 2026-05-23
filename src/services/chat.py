@@ -13,6 +13,7 @@ from src.services.personality_engine import (
 from src.services.emotion import extract_emotion
 from src.services.event_memory import add_event, save_conversation_turn
 from src.services.diary import accumulate_day_data, check_and_generate_yesterday_diary
+from src.services.pad_service import load_pad_state, save_pad_state, update_pad_from_emotions
 from src.models.personality import PersonalityWeights
 from src.models.event import Event
 
@@ -55,6 +56,7 @@ def build_system_prompt(user_id: str) -> tuple[str, PersonalityWeights]:
     """组装完整 system prompt"""
     memory = load_core_memory(user_id)
     base_weights = load_weights(user_id)
+    pad_state = load_pad_state(user_id)
 
     parts = [SYSTEM_PROMPT_TEMPLATE]
 
@@ -63,6 +65,7 @@ def build_system_prompt(user_id: str) -> tuple[str, PersonalityWeights]:
         parts.append(memory_block)
 
     parts.append(base_weights.to_description())
+    parts.append(pad_state.to_style_hints())
 
     return "\n\n".join(parts), base_weights
 
@@ -118,6 +121,14 @@ async def post_chat(
     # 日记数据累积
     accumulate_day_data(user_id, emotion_result)
 
+    # PAD 情感状态更新
+    current_pad = load_pad_state(user_id)
+    new_pad = update_pad_from_emotions(current_pad, emotion_result.emotions)
+    save_pad_state(user_id, new_pad)
+
+    # 记录最后活跃时间（供心跳使用）
+    _save_last_activity(user_id)
+
     # Reflection：每周一次，唯一修改权重的地方
     reflection_result = None
     if should_trigger_reflection(user_id):
@@ -154,3 +165,22 @@ async def chat_turn_stream(user_id: str, user_message: str):
 
     post_result = await post_chat(user_id, user_message, ai_reply, history, base_weights)
     yield ("done", post_result)
+
+
+def _save_last_activity(user_id: str) -> None:
+    """记录用户最后活跃时间"""
+    path = settings.data_dir / user_id / "last_activity.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps({"last_active_at": datetime.now().isoformat()}),
+        encoding="utf-8",
+    )
+
+
+def load_last_activity(user_id: str) -> str | None:
+    """加载用户最后活跃时间"""
+    path = settings.data_dir / user_id / "last_activity.json"
+    if path.exists():
+        data = json.loads(path.read_text(encoding="utf-8"))
+        return data.get("last_active_at")
+    return None

@@ -1,3 +1,5 @@
+import asyncio
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -12,8 +14,20 @@ from src.api.chat import router as chat_router
 from src.api.diary import router as diary_router
 from src.api.summary import router as summary_router
 from src.api.chapters import router as chapters_router
+from src.api.heartbeat import router as heartbeat_router
+from src.services.heartbeat import heartbeat_loop
 
-app = FastAPI(title="Growth Companion", version="0.1.0")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup: 启动心跳后台任务
+    task = asyncio.create_task(heartbeat_loop())
+    yield
+    # Shutdown: 取消心跳任务
+    task.cancel()
+
+
+app = FastAPI(title="Growth Companion", version="0.2.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -30,6 +44,7 @@ app.include_router(chat_router)
 app.include_router(diary_router)
 app.include_router(summary_router)
 app.include_router(chapters_router)
+app.include_router(heartbeat_router)
 
 
 @app.get("/")

@@ -2,7 +2,10 @@ from fastapi import APIRouter, HTTPException
 
 from src.models.memory import MemoryPatch
 from src.services.memory import load_core_memory, patch_core_memory
-from src.services.event_memory import query_events, delete_event, search_conversations, get_insights
+from src.services.event_memory import (
+    query_events, delete_event, search_conversations, get_insights,
+    decay_all_events, cleanup_forgotten_events,
+)
 
 router = APIRouter(prefix="/api/memory", tags=["memory"])
 
@@ -42,11 +45,15 @@ async def get_events(
     user_id: str = "default",
     limit: int = 20,
     min_importance: float = 0.0,
+    min_strength: float = 0.0,
     event_type: str | None = None,
     start_date: str | None = None,
     end_date: str | None = None,
 ):
-    events = query_events(user_id, limit, min_importance, event_type, start_date, end_date)
+    events = query_events(
+        user_id, limit, min_importance, event_type,
+        start_date, end_date, min_strength=min_strength,
+    )
     return [e.model_dump(mode="json") for e in events]
 
 
@@ -73,3 +80,11 @@ async def get_memory_insights(
 ):
     """查询结构化洞察"""
     return get_insights(user_id, category, limit)
+
+
+@router.post("/events/maintain")
+async def maintain_events(user_id: str = "default"):
+    """手动触发遗忘曲线衰减和清理"""
+    decayed = decay_all_events(user_id)
+    cleaned = cleanup_forgotten_events(user_id)
+    return {"decayed_below_threshold": decayed, "cleaned": cleaned}
