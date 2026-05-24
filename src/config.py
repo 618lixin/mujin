@@ -20,13 +20,6 @@ class Settings(BaseSettings):
     # 对话历史
     max_history_turns: int = 20
 
-    # Reflection 触发
-    reflection_turn_interval: int = 30
-
-    # PAD 情感模型
-    pad_drift_rate: float = 0.2          # 情绪驱动 PAD 漂移速度
-    pad_decay_rate: float = 0.05         # 无情绪时向中性回归速度
-
     # 遗忘曲线
     forget_min_strength: float = 0.05    # 低于此强度的事件可被清理
     forget_base_stability: float = 30.0  # 基础记忆稳定天数
@@ -36,7 +29,6 @@ class Settings(BaseSettings):
     heartbeat_interval_minutes: int = 30         # 心跳间隔 (分钟)
     heartbeat_min_idle_minutes: int = 120        # 最短空闲才触发主动消息
     heartbeat_max_idle_minutes: int = 1440       # 最长空闲强制签到 (24h)
-    heartbeat_idle_drift_rate: float = 0.05      # 空闲 PAD 漂移速度
     heartbeat_proactive_enabled: bool = True     # 是否启用主动消息
 
     # 记忆检索

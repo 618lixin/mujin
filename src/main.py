@@ -9,12 +9,12 @@ from fastapi.responses import FileResponse
 
 from src.api.memory import router as memory_router
 from src.api.init import router as init_router
-from src.api.personality import router as personality_router
 from src.api.chat import router as chat_router
 from src.api.diary import router as diary_router
 from src.api.summary import router as summary_router
 from src.api.chapters import router as chapters_router
 from src.api.heartbeat import router as heartbeat_router
+from src.api.observations import router as observations_router
 from src.services.heartbeat import heartbeat_loop
 
 
@@ -27,7 +27,7 @@ async def lifespan(app: FastAPI):
     task.cancel()
 
 
-app = FastAPI(title="Growth Companion", version="0.2.0", lifespan=lifespan)
+app = FastAPI(title="Growth Companion", version="0.3.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -39,12 +39,12 @@ app.add_middleware(
 
 app.include_router(init_router)
 app.include_router(memory_router)
-app.include_router(personality_router)
 app.include_router(chat_router)
 app.include_router(diary_router)
 app.include_router(summary_router)
 app.include_router(chapters_router)
 app.include_router(heartbeat_router)
+app.include_router(observations_router)
 
 
 @app.get("/")

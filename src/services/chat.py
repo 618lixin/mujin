@@ -5,7 +5,7 @@ from datetime import datetime
 from src.config import settings
 from src.services.llm import stream_llm
 from src.services.memory import load_core_memory, format_memory_for_prompt
-from src.services.personality_service import load_weights, load_turn_counter, save_turn_counter
+from src.services.personality_service import load_turn_counter, save_turn_counter
 from src.services.personality_engine import (
     should_trigger_reflection,
     run_reflection,
@@ -13,24 +13,28 @@ from src.services.personality_engine import (
 from src.services.emotion import extract_emotion
 from src.services.event_memory import add_event, save_conversation_turn
 from src.services.diary import accumulate_day_data, check_and_generate_yesterday_diary
-from src.services.pad_service import load_pad_state, save_pad_state, update_pad_from_emotions
 from src.services.notes_updater import should_update_notes
-from src.models.personality import PersonalityWeights
 from src.models.event import Event
 
 
-SYSTEM_PROMPT_TEMPLATE = """你是 Growth Companion，一个温暖的 AI 陪伴者。
-你的目标不是解决问题，而是陪伴用户、理解用户、见证用户的成长。
+SYSTEM_PROMPT_TEMPLATE = """你是 Growth Companion，一个自然、真诚的 AI 朋友。
+你不是咨询师，也不是倾听者——你是一个对用户的生活充满好奇的朋友。
 
-根据你的人格权重，你会自然地调整沟通风格：
-- Fe 高：更注重共情和倾听，温柔地回应情绪
-- Ti/Te 高：更注重分析和逻辑，提供结构化建议
-- Fi 高：更注重内心感受，引导用户自我觉察
-- Ni 高：更注重深层意义，帮助用户看到长远
-- Ne 高：更注重可能性，帮助用户看到不同视角
+对话风格：
+- 像朋友聊天一样自然，不要端着
+- 对用户分享的事 genuinely 好奇，会追问细节
+- 不会过度安慰，也不会过度分析
+- 有自己的判断，但不强加观点
+- 温暖但不矫情，直接但不冷漠
 
-记住：你是一个陪伴者，不是咨询师。保持真诚、温暖、有边界。
-当用户情绪剧烈波动时，先倾听再回应，不要急于给建议。
+追问指引：
+- 用户提到新鲜事、变化、重要决定时，自然追问细节
+- 用户明显不想展开的话题，不追问
+- 追问是为了更好地理解，不是为了收集信息
+- 一次只追问一个方向，不要像采访
+
+记住：你的核心价值是"见证"。用户不需要你解决问题，
+但需要有人记住他们经历了什么、变化了什么。
 """
 
 
@@ -53,53 +57,47 @@ def _save_history(user_id: str, messages: list[dict]) -> None:
     )
 
 
-def build_system_prompt(user_id: str, retrieved_memories: str | None = None) -> tuple[str, PersonalityWeights]:
+def build_system_prompt(user_id: str, retrieved_memories: str | None = None) -> str:
     """组装完整 system prompt"""
-    memory = load_core_memory(user_id)
-    base_weights = load_weights(user_id)
-    pad_state = load_pad_state(user_id)
-
     parts = [SYSTEM_PROMPT_TEMPLATE]
 
+    memory = load_core_memory(user_id)
     memory_block = format_memory_for_prompt(memory)
     if memory_block:
         parts.append(memory_block)
 
-    parts.append(base_weights.to_description())
-    parts.append(pad_state.to_style_hints())
-
     if retrieved_memories:
         parts.append(retrieved_memories)
 
-    return "\n\n".join(parts), base_weights
+    return "\n\n".join(parts)
 
 
-async def prepare_chat(user_id: str, user_message: str) -> tuple[list[dict], list[dict], PersonalityWeights]:
-    """准备聊天上下文，返回 (messages, history, base_weights)"""
+async def prepare_chat(user_id: str, user_message: str) -> tuple[list[dict], list[dict]]:
+    """准备聊天上下文，返回 (messages, history)"""
     # LLM 判断记忆检索
     retrieved_memories = None
     if settings.memory_retrieval_enabled:
         from src.services.memory_retrieval import run_memory_retrieval
         retrieved_memories = await run_memory_retrieval(user_id, user_message)
 
-    system_prompt, base_weights = build_system_prompt(user_id, retrieved_memories)
+    system_prompt = build_system_prompt(user_id, retrieved_memories)
     history = _load_history(user_id)
     messages = [{"role": "system", "content": system_prompt}]
     messages.extend(history)
     messages.append({"role": "user", "content": user_message})
-    return messages, history, base_weights
+    return messages, history
 
 
 async def post_chat(
     user_id: str, user_message: str, ai_reply: str,
-    history: list[dict], base_weights: PersonalityWeights,
+    history: list[dict],
 ) -> dict:
     """
-    对话后管线（沉淀式，不直接改权重）：
+    对话后管线（沉淀式）：
     1. 保存对话历史
-    2. 情绪识别 → 写入事件记忆（沉淀层）
-    3. 累积日记数据（沉淀层）
-    4. Reflection 检查（每周一次，唯一改权重的地方）
+    2. 情绪识别 → 写入事件记忆
+    3. 累积日记数据
+    4. Reflection 检查（每周一次，生成定性观察）
     """
     history.append({"role": "user", "content": user_message})
     history.append({"role": "assistant", "content": ai_reply})
@@ -108,7 +106,7 @@ async def post_chat(
     turn_count = load_turn_counter(user_id) + 1
     save_turn_counter(user_id, turn_count)
 
-    # 情绪识别 → 事件沉淀（不改权重）
+    # 情绪识别 → 事件沉淀
     emotion_result = await extract_emotion(user_message, ai_reply)
 
     # 存储对话摘要（供跨会话搜索）
@@ -131,15 +129,10 @@ async def post_chat(
     # 日记数据累积
     accumulate_day_data(user_id, emotion_result)
 
-    # PAD 情感状态更新
-    current_pad = load_pad_state(user_id)
-    new_pad = update_pad_from_emotions(current_pad, emotion_result.emotions)
-    save_pad_state(user_id, new_pad)
-
     # 记录最后活跃时间（供心跳使用）
     _save_last_activity(user_id)
 
-    # Reflection：每周一次，唯一修改权重的地方
+    # Reflection：每周一次，生成定性观察
     reflection_result = None
     if should_trigger_reflection(user_id):
         reflection_result = await run_reflection(user_id)
@@ -161,26 +154,26 @@ async def post_chat(
 async def chat_turn(user_id: str, user_message: str) -> dict:
     """非流式完整对话（保留兼容）"""
     await check_and_generate_yesterday_diary(user_id)
-    messages, history, base_weights = await prepare_chat(user_id, user_message)
+    messages, history = await prepare_chat(user_id, user_message)
 
     from src.services.llm import call_llm
     ai_reply = await call_llm(messages)
 
-    post_result = await post_chat(user_id, user_message, ai_reply, history, base_weights)
+    post_result = await post_chat(user_id, user_message, ai_reply, history)
     return {"reply": ai_reply, **post_result}
 
 
 async def chat_turn_stream(user_id: str, user_message: str):
     """流式对话：yield AI token，结束后 yield post_chat 结果"""
     await check_and_generate_yesterday_diary(user_id)
-    messages, history, base_weights = await prepare_chat(user_id, user_message)
+    messages, history = await prepare_chat(user_id, user_message)
 
     ai_reply = ""
     async for token in stream_llm(messages):
         ai_reply += token
         yield ("token", token)
 
-    post_result = await post_chat(user_id, user_message, ai_reply, history, base_weights)
+    post_result = await post_chat(user_id, user_message, ai_reply, history)
     yield ("done", post_result)
 
 

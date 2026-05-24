@@ -72,6 +72,17 @@ def _get_conn(user_id: str) -> sqlite3.Connection:
             updated_at TEXT NOT NULL
         )"""
     )
+    # 定性观察表（v0.3 替代八维权重）
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS observations (
+            id TEXT PRIMARY KEY,
+            date TEXT NOT NULL,
+            content TEXT NOT NULL,
+            category TEXT,
+            source TEXT,
+            created_at TEXT NOT NULL
+        )"""
+    )
     # 向后兼容：为旧数据库添加新列
     for col, col_def in [
         ("strength", "REAL NOT NULL DEFAULT 1.0"),
@@ -255,33 +266,8 @@ def cleanup_forgotten_events(user_id: str, min_strength: float | None = None) ->
 # ============ 人格快照 ============
 
 def save_personality_snapshot(user_id: str, weights: dict, summary: str = "") -> None:
-    """保存人格权重快照"""
-    conn = _get_conn(user_id)
-    conn.execute(
-        "INSERT INTO personality_snapshots (weights, summary, created_at) VALUES (?, ?, ?)",
-        (json.dumps(weights), summary, datetime.now().isoformat()),
-    )
-    conn.commit()
-    conn.close()
-
-
-def get_personality_snapshots(user_id: str, limit: int = 50) -> list[dict]:
-    """查询人格权重历史"""
-    conn = _get_conn(user_id)
-    rows = conn.execute(
-        "SELECT * FROM personality_snapshots ORDER BY created_at DESC LIMIT ?",
-        (limit,),
-    ).fetchall()
-    conn.close()
-    return [
-        {
-            "id": r["id"],
-            "weights": json.loads(r["weights"]),
-            "summary": r["summary"],
-            "created_at": r["created_at"],
-        }
-        for r in rows
-    ]
+    """保存人格权重快照（已废弃，保留向后兼容）"""
+    pass
 
 
 # ============ 跨会话搜索（FTS5） ============
@@ -392,3 +378,51 @@ def update_insight_confidence(user_id: str, insight_id: int, new_confidence: flo
     )
     conn.commit()
     conn.close()
+
+
+# ============ 定性观察（v0.3 替代八维权重） ============
+
+def add_observation(
+    user_id: str, obs_id: str, date: str, content: str,
+    category: str | None = None, source: str = "reflection",
+) -> None:
+    """添加一条定性观察"""
+    conn = _get_conn(user_id)
+    conn.execute(
+        "INSERT INTO observations (id, date, content, category, source, created_at) "
+        "VALUES (?, ?, ?, ?, ?, ?)",
+        (obs_id, date, content, category, source, datetime.now().isoformat()),
+    )
+    conn.commit()
+    conn.close()
+
+
+def query_observations(
+    user_id: str,
+    category: str | None = None,
+    limit: int = 20,
+) -> list[dict]:
+    """查询定性观察，按日期降序"""
+    conn = _get_conn(user_id)
+    if category:
+        rows = conn.execute(
+            "SELECT * FROM observations WHERE category = ? ORDER BY date DESC LIMIT ?",
+            (category, limit),
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            "SELECT * FROM observations ORDER BY date DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+    conn.close()
+    return [
+        {
+            "id": r["id"],
+            "date": r["date"],
+            "content": r["content"],
+            "category": r["category"],
+            "source": r["source"],
+            "created_at": r["created_at"],
+        }
+        for r in rows
+    ]
