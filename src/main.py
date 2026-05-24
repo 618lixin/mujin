@@ -15,6 +15,9 @@ from src.api.summary import router as summary_router
 from src.api.chapters import router as chapters_router
 from src.api.heartbeat import router as heartbeat_router
 from src.api.observations import router as observations_router
+from src.api.topics import router as topics_router
+from src.api.projects import router as projects_router
+from src.api.growth_lines import router as growth_lines_router
 from src.services.heartbeat import heartbeat_loop
 
 
@@ -45,6 +48,9 @@ app.include_router(summary_router)
 app.include_router(chapters_router)
 app.include_router(heartbeat_router)
 app.include_router(observations_router)
+app.include_router(topics_router)
+app.include_router(projects_router)
+app.include_router(growth_lines_router)
 
 
 @app.get("/")

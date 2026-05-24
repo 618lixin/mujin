@@ -83,6 +83,53 @@ def _get_conn(user_id: str) -> sqlite3.Connection:
             created_at TEXT NOT NULL
         )"""
     )
+    # 主题表
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS topics (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            description TEXT,
+            first_mentioned TEXT,
+            last_mentioned TEXT,
+            mention_count INTEGER DEFAULT 1,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )"""
+    )
+    # 主题关联表
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS topic_links (
+            topic_id TEXT NOT NULL,
+            item_id TEXT NOT NULL,
+            item_type TEXT NOT NULL,
+            PRIMARY KEY (topic_id, item_id, item_type)
+        )"""
+    )
+    # 项目档案表
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS projects (
+            id TEXT PRIMARY KEY,
+            title TEXT NOT NULL,
+            description TEXT,
+            status TEXT DEFAULT 'active',
+            start_date TEXT,
+            end_date TEXT,
+            event_ids TEXT DEFAULT '[]',
+            summary TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )"""
+    )
+    # 成长线表
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS growth_lines (
+            id TEXT PRIMARY KEY,
+            dimension TEXT NOT NULL,
+            records TEXT DEFAULT '[]',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )"""
+    )
     # 向后兼容：为旧数据库添加新列
     for col, col_def in [
         ("strength", "REAL NOT NULL DEFAULT 1.0"),
@@ -426,3 +473,289 @@ def query_observations(
         }
         for r in rows
     ]
+
+
+# ============ 主题系统 ============
+
+def add_topic(
+    user_id: str, topic_id: str, name: str,
+    description: str | None = None, date_str: str | None = None,
+) -> None:
+    """创建新主题"""
+    now = datetime.now().isoformat()
+    conn = _get_conn(user_id)
+    conn.execute(
+        "INSERT INTO topics (id, name, description, first_mentioned, last_mentioned, "
+        "mention_count, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        (topic_id, name, description or "", date_str or now, date_str or now, 1, now, now),
+    )
+    conn.commit()
+    conn.close()
+
+
+def query_topics(user_id: str, limit: int = 50) -> list[dict]:
+    """查询所有主题，按最近提及排序"""
+    conn = _get_conn(user_id)
+    rows = conn.execute(
+        "SELECT * FROM topics ORDER BY last_mentioned DESC LIMIT ?",
+        (limit,),
+    ).fetchall()
+    conn.close()
+    return [
+        {
+            "id": r["id"],
+            "name": r["name"],
+            "description": r["description"],
+            "first_mentioned": r["first_mentioned"],
+            "last_mentioned": r["last_mentioned"],
+            "mention_count": r["mention_count"],
+        }
+        for r in rows
+    ]
+
+
+def get_topic(user_id: str, topic_id: str) -> dict | None:
+    """获取单个主题"""
+    conn = _get_conn(user_id)
+    row = conn.execute("SELECT * FROM topics WHERE id = ?", (topic_id,)).fetchone()
+    conn.close()
+    if not row:
+        return None
+    return {
+        "id": row["id"],
+        "name": row["name"],
+        "description": row["description"],
+        "first_mentioned": row["first_mentioned"],
+        "last_mentioned": row["last_mentioned"],
+        "mention_count": row["mention_count"],
+    }
+
+
+def get_topic_by_name(user_id: str, name: str) -> dict | None:
+    """按名称精确查找主题"""
+    conn = _get_conn(user_id)
+    row = conn.execute("SELECT * FROM topics WHERE name = ?", (name,)).fetchone()
+    conn.close()
+    if not row:
+        return None
+    return {
+        "id": row["id"],
+        "name": row["name"],
+        "description": row["description"],
+        "first_mentioned": row["first_mentioned"],
+        "last_mentioned": row["last_mentioned"],
+        "mention_count": row["mention_count"],
+    }
+
+
+def update_topic(user_id: str, topic_id: str, **kwargs) -> None:
+    """更新主题字段"""
+    conn = _get_conn(user_id)
+    sets = []
+    vals = []
+    for k, v in kwargs.items():
+        sets.append(f"{k} = ?")
+        vals.append(v)
+    vals.append(datetime.now().isoformat())
+    vals.append(topic_id)
+    conn.execute(
+        f"UPDATE topics SET {', '.join(sets)}, updated_at = ? WHERE id = ?",
+        vals,
+    )
+    conn.commit()
+    conn.close()
+
+
+def link_topic(user_id: str, topic_id: str, item_id: str, item_type: str) -> None:
+    """关联主题和事件/观察"""
+    conn = _get_conn(user_id)
+    try:
+        conn.execute(
+            "INSERT INTO topic_links (topic_id, item_id, item_type) VALUES (?, ?, ?)",
+            (topic_id, item_id, item_type),
+        )
+        conn.commit()
+    except sqlite3.IntegrityError:
+        pass  # 已存在
+    conn.close()
+
+
+def get_topic_links(user_id: str, topic_id: str) -> list[dict]:
+    """获取主题下的所有关联项"""
+    conn = _get_conn(user_id)
+    rows = conn.execute(
+        "SELECT * FROM topic_links WHERE topic_id = ?",
+        (topic_id,),
+    ).fetchall()
+    conn.close()
+    return [
+        {"topic_id": r["topic_id"], "item_id": r["item_id"], "item_type": r["item_type"]}
+        for r in rows
+    ]
+
+
+def get_item_topics(user_id: str, item_id: str, item_type: str) -> list[dict]:
+    """获取事件/观察关联的所有主题"""
+    conn = _get_conn(user_id)
+    rows = conn.execute(
+        "SELECT t.* FROM topics t JOIN topic_links tl ON t.id = tl.topic_id "
+        "WHERE tl.item_id = ? AND tl.item_type = ?",
+        (item_id, item_type),
+    ).fetchall()
+    conn.close()
+    return [
+        {"id": r["id"], "name": r["name"], "description": r["description"]}
+        for r in rows
+    ]
+
+
+# ============ 项目档案 ============
+
+def add_project(
+    user_id: str, project_id: str, title: str,
+    description: str | None = None, event_ids: list[str] | None = None,
+    start_date: str | None = None, end_date: str | None = None,
+) -> None:
+    """创建项目"""
+    now = datetime.now().isoformat()
+    conn = _get_conn(user_id)
+    conn.execute(
+        "INSERT INTO projects (id, title, description, status, start_date, end_date, "
+        "event_ids, summary, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (project_id, title, description or "", "active",
+         start_date or now, end_date or now,
+         json.dumps(event_ids or []), "", now, now),
+    )
+    conn.commit()
+    conn.close()
+
+
+def query_projects(user_id: str, status: str | None = None, limit: int = 50) -> list[dict]:
+    """查询项目列表"""
+    conn = _get_conn(user_id)
+    if status:
+        rows = conn.execute(
+            "SELECT * FROM projects WHERE status = ? ORDER BY updated_at DESC LIMIT ?",
+            (status, limit),
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            "SELECT * FROM projects ORDER BY updated_at DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+    conn.close()
+    return [
+        {
+            "id": r["id"],
+            "title": r["title"],
+            "description": r["description"],
+            "status": r["status"],
+            "start_date": r["start_date"],
+            "end_date": r["end_date"],
+            "event_ids": json.loads(r["event_ids"]),
+            "summary": r["summary"],
+        }
+        for r in rows
+    ]
+
+
+def get_project(user_id: str, project_id: str) -> dict | None:
+    """获取单个项目"""
+    conn = _get_conn(user_id)
+    row = conn.execute("SELECT * FROM projects WHERE id = ?", (project_id,)).fetchone()
+    conn.close()
+    if not row:
+        return None
+    return {
+        "id": row["id"],
+        "title": row["title"],
+        "description": row["description"],
+        "status": row["status"],
+        "start_date": row["start_date"],
+        "end_date": row["end_date"],
+        "event_ids": json.loads(row["event_ids"]),
+        "summary": row["summary"],
+        "created_at": row["created_at"],
+        "updated_at": row["updated_at"],
+    }
+
+
+def update_project(user_id: str, project_id: str, **kwargs) -> None:
+    """更新项目字段"""
+    conn = _get_conn(user_id)
+    sets = []
+    vals = []
+    for k, v in kwargs.items():
+        if k == "event_ids" and isinstance(v, list):
+            v = json.dumps(v)
+        sets.append(f"{k} = ?")
+        vals.append(v)
+    vals.append(datetime.now().isoformat())
+    vals.append(project_id)
+    conn.execute(
+        f"UPDATE projects SET {', '.join(sets)}, updated_at = ? WHERE id = ?",
+        vals,
+    )
+    conn.commit()
+    conn.close()
+
+
+# ============ 成长线 ============
+
+def add_growth_line(user_id: str, gl_id: str, dimension: str) -> None:
+    """创建成长线"""
+    now = datetime.now().isoformat()
+    conn = _get_conn(user_id)
+    conn.execute(
+        "INSERT INTO growth_lines (id, dimension, records, created_at, updated_at) "
+        "VALUES (?, ?, ?, ?, ?)",
+        (gl_id, dimension, "[]", now, now),
+    )
+    conn.commit()
+    conn.close()
+
+
+def query_growth_lines(user_id: str, limit: int = 50) -> list[dict]:
+    """查询所有成长线"""
+    conn = _get_conn(user_id)
+    rows = conn.execute(
+        "SELECT * FROM growth_lines ORDER BY updated_at DESC LIMIT ?",
+        (limit,),
+    ).fetchall()
+    conn.close()
+    return [
+        {
+            "id": r["id"],
+            "dimension": r["dimension"],
+            "records": json.loads(r["records"]),
+        }
+        for r in rows
+    ]
+
+
+def get_growth_line(user_id: str, dimension: str) -> dict | None:
+    """按维度查找成长线"""
+    conn = _get_conn(user_id)
+    row = conn.execute(
+        "SELECT * FROM growth_lines WHERE dimension = ?",
+        (dimension,),
+    ).fetchone()
+    conn.close()
+    if not row:
+        return None
+    return {
+        "id": row["id"],
+        "dimension": row["dimension"],
+        "records": json.loads(row["records"]),
+    }
+
+
+def update_growth_line_records(user_id: str, gl_id: str, records: list[dict]) -> None:
+    """更新成长线记录"""
+    conn = _get_conn(user_id)
+    conn.execute(
+        "UPDATE growth_lines SET records = ?, updated_at = ? WHERE id = ?",
+        (json.dumps(records, ensure_ascii=False), datetime.now().isoformat(), gl_id),
+    )
+    conn.commit()
+    conn.close()

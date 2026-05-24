@@ -11,7 +11,7 @@ from src.services.personality_engine import (
     run_reflection,
 )
 from src.services.emotion import extract_emotion
-from src.services.event_memory import add_event, save_conversation_turn
+from src.services.event_memory import add_event, save_conversation_turn, get_topic_by_name, add_topic, update_topic, link_topic
 from src.services.diary import accumulate_day_data, check_and_generate_yesterday_diary
 from src.services.notes_updater import should_update_notes
 from src.models.event import Event
@@ -125,6 +125,19 @@ async def post_chat(
             event_type=emotion_result.event_type,
         )
         add_event(user_id, event)
+
+        # 主题关联
+        for topic_name in emotion_result.topics:
+            existing = get_topic_by_name(user_id, topic_name)
+            if existing:
+                update_topic(user_id, existing["id"],
+                             last_mentioned=datetime.now().isoformat(),
+                             mention_count=existing["mention_count"] + 1)
+                link_topic(user_id, existing["id"], event.id, "event")
+            else:
+                tid = str(uuid.uuid4())[:8]
+                add_topic(user_id, tid, topic_name, date_str=datetime.now().isoformat())
+                link_topic(user_id, tid, event.id, "event")
 
     # 日记数据累积
     accumulate_day_data(user_id, emotion_result)

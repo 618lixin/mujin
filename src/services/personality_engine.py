@@ -15,6 +15,9 @@ from src.services.event_memory import (
     get_insights,
     add_observation,
     query_observations,
+    add_growth_line,
+    get_growth_line,
+    update_growth_line_records,
 )
 from src.services.memory import patch_core_memory
 from src.models.memory import MemoryPatch
@@ -68,6 +71,32 @@ REFLECTION_PROMPT = """你是一个 AI 陪伴者的反思系统。
 - observations 是自然语言描述，如"你开始更多表达自己的感受"、"你对工作似乎没有之前那么焦虑了"
 - 如果本周无明显变化，observations 可以为空数组
 - 每条观察应该是独立的、具体的描述
+"""
+
+GROWTH_LINE_PROMPT = """基于本周事件和观察，判断用户是否有可以量化的成长维度。
+
+=== 本周事件 ===
+{recent_events}
+
+=== 本周观察 ===
+{observations}
+
+=== 已有成长线 ===
+{existing_growth_lines}
+
+请判断是否有成长维度需要新增或更新。成长维度应该是可以观察到变化的方面，如"自信心"、"社交意愿"、"编程能力"等。
+
+以 JSON 格式输出（不要输出其他内容）：
+{{
+  "updates": [
+    {{"dimension": "维度名称", "value": 0.0到1.0的当前估值, "note": "简短说明"}}
+  ]
+}}
+
+规则：
+- value 是对当前状态的估计（0.0 最低，1.0 最高），不是变化量
+- 只输出有把握的维度，宁缺毋滥
+- 如果没有可识别的成长维度，updates 为空数组
 """
 
 
@@ -220,9 +249,96 @@ async def run_reflection(user_id: str) -> dict | None:
                 source="weekly_reflection",
             )
 
+    # 项目归并
+    merge_result = None
+    try:
+        from src.services.project_service import auto_merge_events
+        merge_result = await auto_merge_events(user_id)
+    except Exception:
+        pass
+
+    # 成长线更新
+    growth_result = None
+    try:
+        growth_result = await _update_growth_lines(user_id, events_text, saved_obs)
+    except Exception:
+        pass
+
     return {
         "analysis": data.get("analysis", ""),
         "insight": insight,
         "observations": saved_obs,
         "new_insights": new_insights,
+        "project_merge": merge_result,
+        "growth_updates": growth_result,
+    }
+
+
+async def _update_growth_lines(
+    user_id: str, events_text: str, observations: list[dict],
+) -> list[dict] | None:
+    """LLM 分析事件趋势，更新成长线"""
+    from src.services.event_memory import query_growth_lines
+
+    obs_text = "\n".join(
+        f"- {o['content']}" for o in observations
+    ) if observations else "暂无观察"
+
+    existing_gl = query_growth_lines(user_id)
+    gl_text = "\n".join(
+        f"- {g['dimension']}: {len(g['records'])} 条记录"
+        for g in existing_gl
+    ) if existing_gl else "暂无成长线"
+
+    prompt = GROWTH_LINE_PROMPT.format(
+        recent_events=events_text,
+        observations=obs_text,
+        existing_growth_lines=gl_text,
+    )
+
+    try:
+        response = await call_cheap_llm(
+            [{"role": "user", "content": prompt}],
+            temperature=0.2,
+            max_tokens=256,
+        )
+        text = response.strip()
+        if text.startswith("```"):
+            text = text.split("\n", 1)[1].rsplit("```", 1)[0].strip()
+        data = json.loads(text)
+    except (json.JSONDecodeError, IndexError):
+        return None
+
+    today_str = date.today().isoformat()
+    updates_done = []
+
+    for upd in data.get("updates", []):
+        dim = upd.get("dimension", "")
+        value = upd.get("value")
+        note = upd.get("note", "")
+        if not dim or value is None:
+            continue
+
+        gl = get_growth_line(user_id, dim)
+        new_record = {"date": today_str, "value": round(float(value), 2), "note": note}
+
+        if gl:
+            records = gl["records"] + [new_record]
+            update_growth_line_records(user_id, gl["id"], records)
+        else:
+            gl_id = str(uuid.uuid4())[:8]
+            add_growth_line(user_id, gl_id, dim)
+            update_growth_line_records(user_id, gl_id, [new_record])
+
+        updates_done.append({"dimension": dim, **new_record})
+
+    return updates_done if updates_done else None
+
+    return {
+        "analysis": data.get("analysis", ""),
+        "insight": insight,
+        "observations": saved_obs,
+        "new_insights": new_insights,
+        "project_merge": merge_result,
+        "growth_updates": growth_result,
     }

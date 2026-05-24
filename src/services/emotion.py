@@ -15,7 +15,8 @@ AI 回复：{ai_reply}
   "emotions": ["从 {valid_emotions} 中选择，可多个"],
   "event_type": "conflict/milestone/emotion/decision 或 null",
   "importance": 0.0到1.0之间的浮点数,
-  "summary": "一句话摘要"
+  "summary": "一句话摘要",
+  "topics": ["从对话中识别的主题标签，如'职业选择'、'和父亲的关系'、'考研'、'健身'等，最多3个，日常闲聊为空数组"]
 }}
 
 评分标准：
@@ -23,15 +24,21 @@ AI 回复：{ai_reply}
 - importance 0.3~0.6：有情绪但非重大事件
 - importance 0.6~0.8：明确的事件或强烈情绪
 - importance 0.8~1.0：人生重大变化或情绪崩溃
+
+主题识别规则：
+- 只提取对话中明确涉及的主题，不要推测
+- 主题应该是用户生活中持续出现的关注点或经历
+- 如果用户换了工作，主题可以是"职业变化"或具体公司名
 """
 
 
 class EmotionResult:
-    def __init__(self, emotions: list[str], event_type: str | None, importance: float, summary: str):
+    def __init__(self, emotions: list[str], event_type: str | None, importance: float, summary: str, topics: list[str] | None = None):
         self.emotions = emotions
         self.event_type = event_type
         self.importance = max(0.0, min(1.0, importance))
         self.summary = summary
+        self.topics = topics or []
 
     def to_dict(self) -> dict:
         return {
@@ -39,6 +46,7 @@ class EmotionResult:
             "event_type": self.event_type,
             "importance": self.importance,
             "summary": self.summary,
+            "topics": self.topics,
         }
 
 
@@ -80,4 +88,5 @@ async def extract_emotion(user_message: str, ai_reply: str) -> EmotionResult:
         event_type=_validate_event_type(data.get("event_type")),
         importance=data.get("importance", 0.0),
         summary=data.get("summary", ""),
+        topics=data.get("topics", []),
     )
