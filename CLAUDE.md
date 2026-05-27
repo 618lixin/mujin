@@ -1,14 +1,22 @@
-# 人格画像 AI 对话工具
+# AI 智能日记系统
 
-基于 JPAF（Jungian Personality Adaptation Framework）论文的历史人物人格模拟系统。
+基于「降低输入成本 + 提高输出价值」的 AI 辅助日记管理产品。
 
 ## 项目概述
 
-核心目标：通过单模型 + 动态八维状态机，模拟历史人物进行对话。
+核心目标：对话即记录，AI 帮用户串联、提取、分析、对比日记，变成长期成长档案。
 
 - 技术栈：Python 后端 + LLM API
-- 理论基础：荣格八维心理功能（Ti/Te/Fi/Fe/Si/Se/Ni/Ne）
-- 架构：单 LLM + 8 维权重状态向量（非多 Agent）
+- 架构：单 LLM + 五层沉淀系统（对话层 → 抽取层 → 记忆层 → Reflection → 沉淀生成器）
+
+## 环境管理
+
+使用 conda 环境 `growth-companion` 管理依赖。所有 Python 命令通过 `conda run -n growth-companion` 执行。
+
+```
+conda run -n growth-companion python ...
+conda run -n growth-companion python -m ...
+```
 
 ## 三工具协同工作流
 

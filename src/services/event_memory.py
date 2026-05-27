@@ -34,14 +34,6 @@ def _get_conn(user_id: str) -> sqlite3.Connection:
         )"""
     )
     conn.execute(
-        """CREATE TABLE IF NOT EXISTS personality_snapshots (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            weights TEXT NOT NULL,
-            summary TEXT,
-            created_at TEXT NOT NULL
-        )"""
-    )
-    conn.execute(
         """CREATE TABLE IF NOT EXISTS conversation_turns (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_msg TEXT NOT NULL,
@@ -312,9 +304,6 @@ def cleanup_forgotten_events(user_id: str, min_strength: float | None = None) ->
 
 # ============ 人格快照 ============
 
-def save_personality_snapshot(user_id: str, weights: dict, summary: str = "") -> None:
-    """保存人格权重快照（已废弃，保留向后兼容）"""
-    pass
 
 
 # ============ 跨会话搜索（FTS5） ============
