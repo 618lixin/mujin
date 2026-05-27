@@ -748,3 +748,12 @@ def update_growth_line_records(user_id: str, gl_id: str, records: list[dict]) ->
     )
     conn.commit()
     conn.close()
+
+
+def delete_growth_line(user_id: str, gl_id: str) -> bool:
+    """删除成长线"""
+    conn = _get_conn(user_id)
+    cursor = conn.execute("DELETE FROM growth_lines WHERE id = ?", (gl_id,))
+    conn.commit()
+    conn.close()
+    return cursor.rowcount > 0

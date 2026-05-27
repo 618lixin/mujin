@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from src.services.event_memory import query_growth_lines, get_growth_line
+from src.services.event_memory import query_growth_lines, get_growth_line, delete_growth_line
 
 router = APIRouter(prefix="/api/growth-lines", tags=["growth-lines"])
 
@@ -18,3 +18,13 @@ async def get_growth_line_detail(dimension: str, user_id: str = "default"):
     if not gl:
         return {"error": "该维度成长线不存在"}
     return gl
+
+
+@router.delete("/{dimension}")
+async def remove_growth_line(dimension: str, user_id: str = "default"):
+    """删除成长线"""
+    gl = get_growth_line(user_id, dimension)
+    if not gl:
+        return {"error": "该维度成长线不存在"}
+    delete_growth_line(user_id, gl["id"])
+    return {"deleted": dimension}

@@ -37,6 +37,16 @@ class ProjectPatchRequest(BaseModel):
     event_ids: list[str] | None = None
 
 
+@router.post("/{project_id}/summary")
+async def generate_summary(project_id: str, user_id: str = "default"):
+    """生成项目 AI 总结"""
+    proj = get_project(user_id, project_id)
+    if not proj:
+        return {"error": "项目不存在"}
+    summary = await generate_project_summary(user_id, project_id)
+    return {"summary": summary}
+
+
 @router.patch("/{project_id}")
 async def patch_project(project_id: str, req: ProjectPatchRequest):
     """编辑项目（手动调整关联事件）"""

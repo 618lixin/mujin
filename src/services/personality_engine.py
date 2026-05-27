@@ -332,12 +332,3 @@ async def _update_growth_lines(
         updates_done.append({"dimension": dim, **new_record})
 
     return updates_done if updates_done else None
-
-    return {
-        "analysis": data.get("analysis", ""),
-        "insight": insight,
-        "observations": saved_obs,
-        "new_insights": new_insights,
-        "project_merge": merge_result,
-        "growth_updates": growth_result,
-    }
