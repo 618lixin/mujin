@@ -2050,11 +2050,12 @@ export function MainWindow({
                   </svg>
                 </button>
 
+                <div className="h-4 w-px bg-paper-deep/30 mx-1" />
                 <button
                   onClick={() => void handleGenerateDiary()}
                   disabled={diaryGenerating}
-                  className="w-7 h-7 flex items-center justify-center rounded-lg text-ink-ghost hover:text-bamboo hover:bg-bamboo-mist/50 transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-                  title="生成今日日记"
+                  className="px-2.5 h-7 flex items-center gap-1.5 rounded-lg text-ink-ghost hover:text-bamboo hover:bg-bamboo-mist/50 transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                  title={t("main.editor.emptyGenerateDiary", { defaultValue: "生成今日日记" })}
                 >
                   {diaryGenerating ? (
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="animate-spin">
@@ -2066,6 +2067,11 @@ export function MainWindow({
                       <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
                     </svg>
                   )}
+                  <span className="text-[11px]">
+                    {diaryGenerating
+                      ? t("main.editor.generatingDiary", { defaultValue: "生成中…" })
+                      : t("main.editor.emptyGenerateDiary", { defaultValue: "生成日记" })}
+                  </span>
                 </button>
 
                 <button
