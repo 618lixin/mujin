@@ -6,16 +6,21 @@
 
 核心目标：对话即记录，AI 帮用户串联、提取、分析、对比日记，变成长期成长档案。
 
-- 技术栈：Python 后端 + LLM API
+- 技术栈：Tauri 2 + Rust 后端 + React 19 前端
 - 架构：单 LLM + 五层沉淀系统（对话层 → 抽取层 → 记忆层 → Reflection → 沉淀生成器）
 
 ## 环境管理
 
-使用 conda 环境 `growth-companion` 管理依赖。所有 Python 命令通过 `conda run -n growth-companion` 执行。
+桌面应用入口在 `frontend/` 目录，使用 npm 和 cargo 管理依赖。
 
 ```
-conda run -n growth-companion python ...
-conda run -n growth-companion python -m ...
+cd frontend
+npm install              # 安装前端依赖
+npm run dev              # Vite 开发服务器
+npm run tauri dev        # Tauri 桌面开发模式
+npm run tauri build      # 构建 release exe
+cargo test               # Rust 测试（在 frontend/src-tauri/ 下）
+npm test                 # 前端测试
 ```
 
 ## 三工具协同工作流
