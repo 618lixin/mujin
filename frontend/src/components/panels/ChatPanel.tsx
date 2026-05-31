@@ -10,6 +10,7 @@ type LocalMessage = ChatMessage & {
   meta?: string;
   pending?: boolean;
   proactive?: boolean;
+  eventCreated?: boolean;
 };
 
 interface TokenPayload {
@@ -34,12 +35,13 @@ function messageId(prefix: string) {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
-function emotionMeta(emotion?: EmotionResult): string {
-  if (!emotion) return "";
+function emotionMeta(emotion?: EmotionResult, turnCount?: number): { text: string; eventCreated: boolean } {
+  if (!emotion) return { text: "", eventCreated: false };
   const parts: string[] = [];
+  if (turnCount !== undefined) parts.push(`第 ${turnCount} 轮对话`);
   if (emotion.emotions.length > 0) parts.push(`情绪 ${emotion.emotions.join(" / ")}`);
-  if (emotion.importance >= 0.6) parts.push("已沉淀为事件");
-  return parts.join(" · ");
+  const eventCreated = emotion.importance >= 0.6 && !!emotion.eventType;
+  return { text: parts.join(" · "), eventCreated };
 }
 
 export function ChatPanel() {
@@ -102,10 +104,11 @@ export function ChatPanel() {
       listen<DonePayload>("chat-done", (event) => {
         const assistantId = claimStreamEvent(event.payload.streamId);
         if (!assistantId) return;
+        const meta = emotionMeta(event.payload.meta.emotion, event.payload.meta.turnCount);
         setMessages((current) =>
           current.map((msg) =>
             msg.id === assistantId
-              ? { ...msg, pending: false, meta: emotionMeta(event.payload.meta.emotion) }
+              ? { ...msg, pending: false, meta: meta.text, eventCreated: meta.eventCreated }
               : msg,
           ),
         );
@@ -247,7 +250,22 @@ export function ChatPanel() {
                 }`}
               >
                 {msg.pending && !msg.content ? "正在想..." : msg.content}
-                {msg.meta && <div className="mt-1 text-[10px] opacity-60">{msg.meta}</div>}
+                {msg.meta && (
+                  <div className={`mt-2 pt-2 border-t text-[11px] flex items-center gap-1.5 ${
+                    msg.eventCreated
+                      ? "border-bamboo/30 text-bamboo"
+                      : "border-paper-deep/20 text-ink-ghost"
+                  }`}>
+                    {msg.eventCreated && (
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+                        <polyline points="22 4 12 14.01 9 11.01" />
+                      </svg>
+                    )}
+                    <span>{msg.meta}</span>
+                    {msg.eventCreated && <span className="font-medium">已保存到记忆</span>}
+                  </div>
+                )}
               </div>
             </div>
           ))
