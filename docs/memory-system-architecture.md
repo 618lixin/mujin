@@ -218,6 +218,7 @@ save_conversation_turn(user_id, user_msg, ai_msg, summary, emotions) -> ()
 query_conversation_turns_by_date(user_id, utc_start, utc_end, limit)
     -> Vec<ConversationTurn>
 search_conversations(user_id, query, limit)  // FTS5 MATCH 全文搜索
+search_conversations_like(user_id, keyword, limit)  // LIKE 关键字搜索（中文兼容）
 
 // 洞察 (insights)
 save_insight(user_id, category, content, confidence, source) -> ()
@@ -375,9 +376,10 @@ cleanup_forgotten_events(user_id, forget_min_strength)
 每次用户发消息时，`chat_stream_start` → `prepare_chat` 构建 system prompt：
 
 ```
-1. query_events_by_date()       → 当天事件（带数量上限）
-2. load_core_memory()           → user_profile + companion_notes
-3. load_history()               → 最近 N 轮对话历史
+1. retrieve_memories()          → 双路检索（LIKE 搜索历史对话 + 近 30 天重要事件）
+2. query_events_by_date()       → 当天事件（带数量上限）
+3. load_core_memory()           → user_profile + companion_notes
+4. load_history()               → 最近 N 轮对话历史
 
         ↓ 拼装为 system prompt ↓
 
@@ -388,10 +390,16 @@ cleanup_forgotten_events(user_id, forget_min_strength)
 
   --- 今天的记忆 ---
   {当天事件列表}
+
+  --- 相关历史记忆 ---
+  {LIKE 搜索到的相关对话摘要 + 近期重要事件}
 ```
 
-> **注意**：Phase 4+ 计划中的语义记忆检索（FTS5 搜索历史对话 + 根据用户当前消息检索相关事件）尚未实现。
-> `prepare_chat` 中 `retrieved_memories` 当前为 `None`，待后续开发。
+#### 检索策略
+
+- **LIKE 关键字搜索**：取用户消息前 20 字符，在 `conversation_turns` 的 `summary` 和 `user_msg` 列做 `LIKE '%keyword%'` 搜索（上限 5 条）
+- **近期重要事件**：查询近 30 天 importance ≥ 0.5 的事件（上限 5 条）
+- 使用 LIKE 而非 FTS5，因为 FTS5 默认 unicode61 分词器将连续 CJK 字符视为一个 token，无法做中文子串匹配
 
 ### 7.2 日记生成素材检索
 
@@ -499,7 +507,7 @@ MainWindow 工具栏中「生成日记」按钮执行后，显示四路素材统
 
 | 功能 | 当前状态 | 位置 |
 |------|---------|------|
-| 语义记忆检索 | ❌ `retrieved_memories = None` | `chat.rs:prepare_chat` |
+| 语义记忆检索 | ✅ 已实现（LIKE + 事件双路检索） | `chat.rs:retrieve_memories` |
 | Reflection 检查 | ❌ `// TODO: Reflection check` | `chat.rs:post_chat` |
 | Notes 自动更新 | ❌ `// TODO: Notes auto-update` | `chat.rs:post_chat` |
 
