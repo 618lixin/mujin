@@ -19,7 +19,7 @@ import { BackgroundLayer } from "./BackgroundLayer";
 import { ChatPanel } from "./panels/ChatPanel";
 import { GrowthPanel } from "./panels/GrowthPanel";
 import { MemoryPanel } from "./panels/MemoryPanel";
-import { generateDiary } from "../features/api/diary";
+import { generateDiary, quickExtract } from "../features/api/diary";
 import { SettingsPanel } from "./SettingsPanel";
 import { SlidingButtonGroup } from "./SlidingButtonGroup";
 import {
@@ -805,6 +805,10 @@ export function MainWindow({
       replaceNoteMetadata(note);
       setSaveState("saved");
       setErrorMessage(null);
+      // Fire-and-forget event extraction (don't block save UX)
+      if (content.trim()) {
+        quickExtract(note.id, note.title, note.content).catch(() => {});
+      }
       return note;
     } catch (error) {
       setSaveState("error");
