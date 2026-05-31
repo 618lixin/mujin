@@ -337,6 +337,7 @@ pub struct DiaryGenerateResult {
     pub content: String,
     pub source_event_count: usize,
     pub source_turn_count: usize,
+    pub source_note_count: usize,
     pub regenerated: bool,
 }
 

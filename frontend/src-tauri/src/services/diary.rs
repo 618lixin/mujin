@@ -160,6 +160,7 @@ fn build_diary_prompt(
     date: &str,
     events: &str,
     turns: &str,
+    notes: &str,
     core_memory: &str,
     has_data: bool,
 ) -> String {
@@ -170,13 +171,13 @@ fn build_diary_prompt(
     let mut parts = Vec::new();
 
     parts.push(format!(
-        "你是一个温暖、细心的日记助手。请根据以下用户今天的事件和对话摘要，生成一篇中文日记。\n\
+        "你是一个温暖、细心的日记助手。请根据以下用户今天的事件、对话摘要和笔记，生成一篇中文日记。\n\
          \n\
          要求：\n\
          - 日记使用 Markdown 格式。\n\
          - 以 `# {date}` 开头。\n\
          - 语言温暖、自然、平实。\n\
-         - 基于提供的事件和对话摘要，不要编造。\n\
+         - 基于提供的事件、对话摘要和笔记内容，不要编造。\n\
          - 如有不确定，可以说「似乎」「可能」。\n\
          - 如果数据不多，写短一些即可，不要凑字数。\n\
          - 控制在 1200-1800 字左右。\n\
@@ -198,6 +199,10 @@ fn build_diary_prompt(
 
     if !turns.is_empty() {
         parts.push(format!("--- 今天的对话摘要 ---\n\n{}", turns));
+    }
+
+    if !notes.is_empty() {
+        parts.push(format!("--- 今天的笔记 ---\n\n{}", notes));
     }
 
     parts.push(format!("请根据以上信息，生成 # {date} 的日记正文："));
@@ -248,6 +253,59 @@ fn format_turns_for_prompt(turns: &[super::types::ConversationTurn]) -> String {
         })
         .collect::<Vec<_>>()
         .join("\n")
+}
+
+/// Filter notes created on the given local date, returning their contents.
+/// Notes that are themselves diary entries are excluded to avoid circular sourcing.
+fn query_notes_by_date(store: &NoteStore, date: &str) -> Result<Vec<(String, String)>, AppError> {
+    use chrono::{Local, TimeZone, Utc};
+
+    let naive_date = chrono::NaiveDate::parse_from_str(date, "%Y-%m-%d")
+        .map_err(|e| AppError::new("invalidDate", format!("Failed to parse date '{date}': {e}")))?;
+
+    let local_start = Local
+        .from_local_datetime(&naive_date.and_hms_opt(0, 0, 0).unwrap())
+        .unwrap();
+    let local_end = Local
+        .from_local_datetime(&naive_date.and_hms_opt(23, 59, 59).unwrap())
+        .unwrap();
+    let utc_start = local_start.with_timezone(&Utc);
+    let utc_end = local_end.with_timezone(&Utc);
+
+    let notes = store.list_notes()?;
+    let mut result: Vec<(String, String)> = Vec::new();
+    for meta in &notes {
+        // Skip diary entries themselves
+        if meta.category == "diary" {
+            continue;
+        }
+        if meta.created_at >= utc_start && meta.created_at <= utc_end {
+            let note = store.read_note(&meta.id)?;
+            result.push((meta.title.clone(), note.content));
+        }
+    }
+    Ok(result)
+}
+
+/// Format user notes for prompt inclusion.
+fn format_notes_for_prompt(notes: &[(String, String)]) -> String {
+    if notes.is_empty() {
+        return String::new();
+    }
+    notes
+        .iter()
+        .enumerate()
+        .map(|(i, (title, content))| {
+            // Truncate very long notes to keep prompt manageable
+            let preview = if content.chars().count() > 800 {
+                format!("{}…（以下内容过长，已截断）", &content.chars().take(800).collect::<String>())
+            } else {
+                content.clone()
+            };
+            format!("### {}. {}\n\n{}", i + 1, title, preview)
+        })
+        .collect::<Vec<_>>()
+        .join("\n\n")
 }
 
 /// Build the empty-day diary markdown.
@@ -329,6 +387,7 @@ pub async fn generate_diary(
             content: existing.content,
             source_event_count: 0, // not re-counting
             source_turn_count: 0,
+            source_note_count: 0,
             regenerated: false,
         });
     }
@@ -404,10 +463,13 @@ async fn generate_diary_inner(
     let events = db.query_events_by_date(user_id, &utc_start, &utc_end, MAX_SOURCE_EVENTS)?;
     let turns = db.query_conversation_turns_by_date(user_id, &utc_start, &utc_end, MAX_SOURCE_TURNS)?;
     let core_memory = load_core_memory(base_dir, user_id, config)?;
+    let store_for_notes = default_store()?;
+    let user_notes = query_notes_by_date(&store_for_notes, date)?;
 
     let source_event_count = events.len();
     let source_turn_count = turns.len();
-    let has_data = !events.is_empty() || !turns.is_empty();
+    let source_note_count = user_notes.len();
+    let has_data = !events.is_empty() || !turns.is_empty() || !user_notes.is_empty();
 
     // Empty day: generate simple markdown without LLM
     if !has_data {
@@ -421,6 +483,7 @@ async fn generate_diary_inner(
             content: entry.content,
             source_event_count: 0,
             source_turn_count: 0,
+            source_note_count: 0,
             regenerated: is_regenerate,
         });
     }
@@ -428,9 +491,10 @@ async fn generate_diary_inner(
     // Build LLM prompt
     let events_text = format_events_for_prompt(&events);
     let turns_text = format_turns_for_prompt(&turns);
+    let notes_text = format_notes_for_prompt(&user_notes);
     let memory_text = super::memory::format_memory_for_prompt(&core_memory);
 
-    let prompt = build_diary_prompt(date, &events_text, &turns_text, &memory_text, true);
+    let prompt = build_diary_prompt(date, &events_text, &turns_text, &notes_text, &memory_text, true);
 
     let messages = vec![ChatMessage {
         role: "user".to_string(),
@@ -459,6 +523,7 @@ async fn generate_diary_inner(
         content: entry.content,
         source_event_count,
         source_turn_count,
+        source_note_count,
         regenerated: is_regenerate,
     })
 }
@@ -555,7 +620,7 @@ mod tests {
 
     #[test]
     fn test_build_diary_prompt_no_data() {
-        let prompt = build_diary_prompt("2026-05-30", "", "", "", false);
+        let prompt = build_diary_prompt("2026-05-30", "", "", "", "", false);
         assert!(prompt.is_empty());
     }
 
@@ -565,12 +630,14 @@ mod tests {
             "2026-05-30",
             "1. 面试事件",
             "1. 职业讨论",
+            "### 1. 想法\n\n今天的一些思考",
             "用户画像: 程序员",
             true,
         );
         assert!(prompt.contains("# 2026-05-30"));
         assert!(prompt.contains("面试事件"));
         assert!(prompt.contains("职业讨论"));
+        assert!(prompt.contains("今天的一些思考"));
         assert!(prompt.contains("用户画像"));
     }
 
@@ -681,6 +748,7 @@ mod tests {
             "1. 面试事件",
             "1. 职业讨论",
             "",
+            "",
             true,
         );
         // The final instruction should contain the actual date, not the literal "{date}"
@@ -688,5 +756,36 @@ mod tests {
         let last_line = prompt.lines().last().unwrap();
         assert!(last_line.contains("2026-05-30"),
             "final instruction should contain formatted date, got: {last_line}");
+    }
+
+    #[test]
+    fn test_format_notes_for_prompt() {
+        let notes = vec![
+            ("想法".to_string(), "今天的一些思考".to_string()),
+            ("计划".to_string(), "明天要做的事情".to_string()),
+        ];
+        let formatted = format_notes_for_prompt(&notes);
+        assert!(formatted.contains("想法"));
+        assert!(formatted.contains("今天的一些思考"));
+        assert!(formatted.contains("计划"));
+        assert!(formatted.contains("明天要做的事情"));
+    }
+
+    #[test]
+    fn test_format_notes_empty() {
+        let notes: Vec<(String, String)> = vec![];
+        let formatted = format_notes_for_prompt(&notes);
+        assert!(formatted.is_empty());
+    }
+
+    #[test]
+    fn test_format_notes_truncates_long_content() {
+        let long_content = "a".repeat(2000);
+        let notes = vec![("长文".to_string(), long_content)];
+        let formatted = format_notes_for_prompt(&notes);
+        // Should contain truncated marker
+        assert!(formatted.contains("已截断"));
+        // Should not include the full 2000 chars
+        assert!(formatted.len() < 2000);
     }
 }

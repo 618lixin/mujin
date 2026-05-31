@@ -165,5 +165,6 @@ export interface DiaryGenerateResult {
   content: string;
   sourceEventCount: number;
   sourceTurnCount: number;
+  sourceNoteCount: number;
   regenerated: boolean;
 }
