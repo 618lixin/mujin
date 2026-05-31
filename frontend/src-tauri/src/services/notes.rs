@@ -1066,7 +1066,7 @@ mod tests {
     fn test_root(name: &str) -> PathBuf {
         let base = std::env::var_os("GROWTH_COMPANION_TEST_TEMP_DIR")
             .map(PathBuf::from)
-            .unwrap_or_else(|| std::env::temp_dir().join("floral-notepaper-rust-tests"));
+            .unwrap_or_else(|| std::env::temp_dir().join("growth-companion-rust-tests"));
         let root = base.join(name);
         if root.exists() {
             fs::remove_dir_all(&root).expect("remove stale test root");
