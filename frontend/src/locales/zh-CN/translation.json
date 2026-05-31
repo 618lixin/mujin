@@ -64,6 +64,8 @@
       "confirmDelete": "确认删除？",
       "contentPlaceholder": "开始写作……",
       "emptyHint": "选择或新建一篇日记",
+      "emptyGenerateDiary": "生成今日日记",
+      "generatingDiary": "生成中…",
       "pinToTile": "钉为磁贴",
       "previewLabel": "预览",
       "undo": "撤销（Ctrl+Z）",
