@@ -1,0 +1,3 @@
+# Keep Cargo files stable across Windows and Unix environments.
+frontend/src-tauri/Cargo.toml text eol=lf
+frontend/src-tauri/Cargo.lock text eol=lf
