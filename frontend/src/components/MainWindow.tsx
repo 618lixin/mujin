@@ -332,6 +332,7 @@ export function MainWindow({
   const [categoryMenuClosing, setCategoryMenuClosing] = useState(false);
   const [categoryMenuConfirmDelete, setCategoryMenuConfirmDelete] = useState(false);
   const [diaryGenerating, setDiaryGenerating] = useState(false);
+  const [diaryFeedback, setDiaryFeedback] = useState<string | null>(null);
   const contentRef = useRef<HTMLTextAreaElement>(null);
   const externalFileMtimeRef = useRef<number>(0);
   const lastExternalSaveRef = useRef<number>(0);
@@ -1271,8 +1272,21 @@ export function MainWindow({
   const handleGenerateDiary = async () => {
     setDiaryGenerating(true);
     setErrorMessage(null);
+    setDiaryFeedback(null);
     try {
       const result = await generateDiary();
+      // Show source feedback
+      const parts: string[] = [];
+      if (result.sourceEventCount > 0) parts.push(`${result.sourceEventCount} 条事件`);
+      if (result.sourceTurnCount > 0) parts.push(`${result.sourceTurnCount} 轮对话`);
+      if (result.sourceNoteCount > 0) parts.push(`${result.sourceNoteCount} 篇笔记`);
+      if (result.regenerated) {
+        setDiaryFeedback(`已重新生成（${parts.join("，")}）`);
+      } else {
+        setDiaryFeedback(`日记已生成（${parts.join("，")}）`);
+      }
+      // Clear feedback after 5s
+      setTimeout(() => setDiaryFeedback(null), 5000);
       // Refresh notes to include the new diary note
       const loadedNotes = await refreshNotes();
       // Find and open the generated diary note
@@ -1337,6 +1351,11 @@ export function MainWindow({
             </span>
           </div>
           <div className="flex items-center">
+            {diaryFeedback && (
+              <span className="max-w-[300px] truncate text-[11px] text-bamboo mr-2 animate-status-fade">
+                {diaryFeedback}
+              </span>
+            )}
             {errorMessage && (
               <span className="max-w-[200px] truncate text-[11px] text-red-400 mr-2">
                 {errorMessage}
