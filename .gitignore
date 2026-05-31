@@ -1,14 +1,25 @@
-# 环境变量（含 API key）
+# Secrets and local runtime data
 .env
-
-# 运行时数据
+.env.*
+!.env.example
 data/
 
 # Python
 __pycache__/
-*.pyc
+*.py[cod]
 *.pyo
 .venv/
+venv/
+
+# Frontend / Tauri
+frontend/node_modules/
+frontend/dist/
+frontend/src-tauri/target/
+frontend/src-tauri/gen/
+
+# Local agent and browser runtime state
+.playwright-mcp/
+.codex/
 
 # IDE
 .vscode/
@@ -16,4 +27,5 @@ __pycache__/
 
 # OS
 Thumbs.db
+Desktop.ini
 .DS_Store
