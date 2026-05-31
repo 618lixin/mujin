@@ -64,6 +64,8 @@
       "confirmDelete": "Confirm delete?",
       "contentPlaceholder": "Start writing…",
       "emptyHint": "Select or create a diary entry",
+      "emptyGenerateDiary": "Generate Today's Diary",
+      "generatingDiary": "Generating…",
       "pinToTile": "Pin to Tile",
       "previewLabel": "Preview",
       "undo": "Undo (Ctrl+Z)",

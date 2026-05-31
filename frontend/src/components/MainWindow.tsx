@@ -2225,8 +2225,35 @@ export function MainWindow({
               className="flex-1 flex min-h-0 animate-view-fade"
             >
               {!selectedId && !isLoading ? (
-                <div className="flex-1 flex items-center justify-center text-[13px] text-ink-ghost">
-                  {t("main.editor.emptyHint", { defaultValue: "选择或新建一篇笔记" })}
+                <div className="flex-1 flex flex-col items-center justify-center gap-6 text-[13px] text-ink-ghost">
+                  <span>{t("main.editor.emptyHint", { defaultValue: "选择或新建一篇日记" })}</span>
+                  <button
+                    onClick={() => void handleGenerateDiary()}
+                    disabled={diaryGenerating}
+                    className="px-6 py-3 flex items-center gap-2.5 rounded-xl bg-bamboo/10 border border-bamboo/25 text-bamboo hover:bg-bamboo/20 hover:border-bamboo/40 active:scale-[0.97] transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                    title={t("main.editor.emptyGenerateDiary", { defaultValue: "生成今日日记" })}
+                  >
+                    {diaryGenerating ? (
+                      <>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="animate-spin">
+                          <circle cx="12" cy="12" r="10" strokeDasharray="32" strokeDashoffset="32" />
+                        </svg>
+                        <span className="text-[14px] font-medium">
+                          {t("main.editor.generatingDiary", { defaultValue: "生成中…" })}
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M12 20h9" />
+                          <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+                        </svg>
+                        <span className="text-[14px] font-medium">
+                          {t("main.editor.emptyGenerateDiary", { defaultValue: "生成今日日记" })}
+                        </span>
+                      </>
+                    )}
+                  </button>
                 </div>
               ) : (
                 <>
