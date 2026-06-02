@@ -846,6 +846,140 @@ impl DbState {
 
     // 闂傚倷绀侀崯鍧楀储濠婂牆纾婚柟鍓х帛閻撳啴鏌涜箛鎿冩Ц濞存粓绠栧娲礃閹绘帒杈呴梺?Projects 闂傚倷绀侀崯鍧楀储濠婂牆纾婚柟鍓х帛閻撳啴鏌涜箛鎿冩Ц濞存粓绠栧娲礃閹绘帒杈呴梺绋款儐閹瑰洭寮诲澶婄濠㈣泛锕ｆ竟鏇㈡⒒娴ｇ鏆遍柛妯荤矒瀹曟垿骞樼紒妯煎帗闂佺绻愰ˇ顖涚妤ｅ啯鈷戦柛鎰絻鐢劑鏌涚€ｎ偅宕岄柡灞界Ч瀹曟寰勬繝浣割棜闂傚倷绀侀崯鍧楀储濠婂牆纾婚柟鍓х帛閻撳啴鏌涜箛鎿冩Ц濞存粓绠栧娲礃閹绘帒杈呴梺绋款儐閹瑰洭寮诲澶婄濠㈣泛锕ｆ竟鏇㈡⒒娴ｇ鏆遍柛妯荤矒瀹曟垿骞樼紒妯煎帗闂佺绻愰ˇ顖涚妤ｅ啯鈷戦柛鎰絻鐢劑鏌涚€ｎ偅宕岄柡灞界Ч瀹曟寰勬繝浣割棜闂傚倷绀侀崯鍧楀储濠婂牆纾婚柟鍓х帛閻撳啴鏌涜箛鎿冩Ц濞存粓绠栧娲礃閹绘帒杈呴梺绋款儐閹瑰洭寮诲澶婄濠㈣泛锕ｆ竟鏇㈡⒒娴ｇ鏆遍柛妯荤矒瀹曟垿骞樼紒妯煎帗闂佺绻愰ˇ顖涚妤ｅ啯鈷戦柛鎰絻鐢劑鏌涚€ｎ偅宕岄柡灞界Ч瀹曟寰勬繝浣割棜闂傚倷绀侀崯鍧楀储濠婂牆纾婚柟鍓х帛閻撳啴鏌涜箛鎿冩Ц濞存粓绠栧娲礃閹绘帒杈呴梺绋款儐閹瑰洭寮诲澶婄濠㈣泛锕ｆ竟鏇㈡⒒娴ｇ鏆遍柛妯荤矒瀹曟垿骞樼紒妯煎帗闂佺绻愰ˇ顖涚妤ｅ啯鈷戦柛鎰絻鐢劑鏌涚€ｎ偅宕岄柡灞界Ч瀹曟寰勬繝浣割棜闂傚倷绀侀崯鍧楀储濠婂牆纾婚柟鍓х帛閻撳啴鏌涜箛鎿冩Ц濞存粓绠栧娲礃閹绘帒杈呴梺绋款儐閹瑰洭寮诲澶婄濠㈣泛锕ｆ竟鏇㈡⒒娴ｇ鏆遍柛妯荤矒瀹曟垿骞樼紒妯煎帗闂佺绻愰ˇ顖涚妤ｅ啯鈷戦柛鎰絻鐢劑鏌涚€ｎ偅宕岄柡灞界Ч瀹曟寰勬繝浣割棜闂傚倷绀侀崯鍧楀储濠婂牆纾婚柟鍓х帛閻撳啴鏌涜箛鎿冩Ц濞存粓绠栧娲礃閹绘帒杈呴梺绋款儐閹瑰洭寮诲澶婄濠㈣泛锕ｆ竟鏇㈡⒒娴ｇ鏆遍柛妯荤矒瀹曟垿骞樼紒妯煎帗闂佺绻愰ˇ顖涚妤ｅ啯鈷戦柛鎰絻鐢劑鏌涚€ｎ偅宕岄柡灞界Ч瀹曟寰勬繝浣割棜闂傚倷绀侀崯鍧楀储濠婂牆纾婚柟鍓х帛閻撳啴鏌涜箛鎿冩Ц濞存粓绠栧娲礃閹绘帒杈呴梺绋款儐閹瑰洭寮诲澶婄濠㈣泛锕ｆ竟鏇㈡⒒娴ｇ鏆遍柛妯荤矒瀹曟垿骞樼紒妯煎帗闂佺绻愰ˇ顖涚妤ｅ啯鈷戦柛鎰絻鐢劑鏌涚€ｎ偅宕岄柡灞界Ч瀹曟寰勬繝浣割棜闂傚倷绀侀崯鍧楀储濠婂牆纾?
 
+    /// Reverse lookup: given an item_id and item_type, return all topic_ids linked to it.
+    pub fn get_topic_ids_for_item(
+        &self,
+        user_id: &str,
+        item_id: &str,
+        item_type: &str,
+    ) -> Result<Vec<String>, AppError> {
+        let conn = self.conn_with_schema(user_id)?;
+        let mut stmt = conn
+            .prepare("SELECT topic_id FROM topic_links WHERE item_id = ?1 AND item_type = ?2")
+            .map_err(|e| AppError::new("db", format!("Failed to prepare item topic query: {e}")))?;
+
+        let rows = stmt
+            .query_map(params![item_id, item_type], |row| row.get("topic_id"))
+            .map_err(|e| AppError::new("db", format!("Failed to query item topics: {e}")))?;
+
+        let mut results = Vec::new();
+        for row in rows {
+            results.push(row.map_err(|e| AppError::new("db", format!("Failed to read topic_id: {e}")))?);
+        }
+        Ok(results)
+    }
+
+    /// Fetch a single event by ID. Returns None if not found.
+    pub fn get_event_by_id(
+        &self,
+        user_id: &str,
+        event_id: &str,
+    ) -> Result<Option<Event>, AppError> {
+        let conn = self.conn_with_schema(user_id)?;
+        let result = conn
+            .query_row(
+                "SELECT * FROM events WHERE id = ?1",
+                params![event_id],
+                |row| {
+                    let created_at: String = row.get("created_at")?;
+                    let stability: f64 = row.get("stability").unwrap_or(30.0);
+                    let strength = compute_strength(&created_at, stability);
+                    Ok(Event {
+                        id: row.get("id")?,
+                        content: row.get("content")?,
+                        emotions: parse_json_array(
+                            &row.get::<_, String>("emotions").unwrap_or_default(),
+                        ),
+                        importance: row.get("importance")?,
+                        event_type: row.get("event_type")?,
+                        strength,
+                        stability,
+                        recall_count: row.get("recall_count").unwrap_or(0),
+                        last_recalled_at: row.get("last_recalled_at")?,
+                        created_at: created_at.clone(),
+                        updated_at: row.get("updated_at")?,
+                    })
+                },
+            )
+            .ok();
+        Ok(result)
+    }
+
+    /// Fetch a single topic by ID. Returns None if not found.
+    pub fn get_topic_by_id(
+        &self,
+        user_id: &str,
+        topic_id: &str,
+    ) -> Result<Option<Topic>, AppError> {
+        let conn = self.conn_with_schema(user_id)?;
+        let result = conn
+            .query_row(
+                "SELECT * FROM topics WHERE id = ?1",
+                params![topic_id],
+                |row| {
+                    Ok(Topic {
+                        id: row.get("id")?,
+                        name: row.get("name")?,
+                        description: row.get("description").unwrap_or_default(),
+                        first_mentioned: row.get("first_mentioned")?,
+                        last_mentioned: row.get("last_mentioned")?,
+                        mention_count: row.get("mention_count").unwrap_or(1),
+                    })
+                },
+            )
+            .ok();
+        Ok(result)
+    }
+
+    /// Search events by keyword using LIKE on content.
+    /// Used by diary memory retrieval as a fallback when topic links are absent.
+    pub fn search_events_like(
+        &self,
+        user_id: &str,
+        pattern: &str,
+        limit: usize,
+    ) -> Result<Vec<Event>, AppError> {
+        let conn = self.conn_with_schema(user_id)?;
+
+        let mut stmt = conn
+            .prepare(
+                "SELECT * FROM events WHERE content LIKE ?1
+                 ORDER BY created_at DESC LIMIT ?2",
+            )
+            .map_err(|e| AppError::new("db", format!("Failed to prepare event LIKE search: {e}")))?;
+
+        let rows = stmt
+            .query_map(params![pattern, limit as i64], |row| {
+                let created_at: String = row.get("created_at")?;
+                let stability: f64 = row.get("stability").unwrap_or(30.0);
+                let strength = compute_strength(&created_at, stability);
+                Ok(Event {
+                    id: row.get("id")?,
+                    content: row.get("content")?,
+                    emotions: parse_json_array(
+                        &row.get::<_, String>("emotions").unwrap_or_default(),
+                    ),
+                    importance: row.get("importance")?,
+                    event_type: row.get("event_type")?,
+                    strength,
+                    stability,
+                    recall_count: row.get("recall_count").unwrap_or(0),
+                    last_recalled_at: row.get("last_recalled_at")?,
+                    created_at: created_at.clone(),
+                    updated_at: row.get("updated_at")?,
+                })
+            })
+            .map_err(|e| AppError::new("db", format!("Failed to search events by keyword: {e}")))?;
+
+        let mut results = Vec::new();
+        for row in rows {
+            results.push(
+                row.map_err(|e| AppError::new("db", format!("Failed to read event LIKE result: {e}")))?,
+            );
+        }
+        Ok(results)
+    }
+
     pub fn add_project(&self, user_id: &str, project: &Project) -> Result<(), AppError> {
         let conn = self.conn_with_schema(user_id)?;
         let now = chrono::Utc::now().to_rfc3339();

@@ -2,6 +2,7 @@ pub mod chat;
 pub mod config;
 pub mod database;
 pub mod diary;
+pub mod diary_memory;
 pub mod extractor;
 pub mod llm;
 pub mod memory;

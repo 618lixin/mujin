@@ -163,6 +163,7 @@ fn build_diary_prompt(
     notes: &str,
     core_memory: &str,
     has_data: bool,
+    related_memories: Option<&str>,
 ) -> String {
     if !has_data {
         return String::new();
@@ -203,6 +204,12 @@ fn build_diary_prompt(
 
     if !notes.is_empty() {
         parts.push(format!("--- 今天的笔记 ---\n\n{}", notes));
+    }
+
+    if let Some(related) = related_memories {
+        if !related.is_empty() {
+            parts.push(related.to_string());
+        }
     }
 
     parts.push(format!("请根据以上信息，生成 # {date} 的日记正文："));
@@ -471,7 +478,7 @@ async fn generate_diary_inner(
     let source_note_count = user_notes.len();
     let has_data = !events.is_empty() || !turns.is_empty() || !user_notes.is_empty();
 
-    // Empty day: generate simple markdown without LLM
+    // Empty day: generate simple markdown without LLM (skip related-memory retrieval)
     if !has_data {
         let content = empty_day_diary(date);
         let store = default_store()?;
@@ -488,13 +495,34 @@ async fn generate_diary_inner(
         });
     }
 
+    // Retrieve related past memories for diary context
+    let related_memories =
+        super::diary_memory::retrieve_related_diary_memories(db, &super::diary_memory::DiaryMemoryQuery {
+            user_id,
+            diary_date: date,
+            day_events: &events,
+            day_turns: &turns,
+            day_notes: &user_notes,
+            max_results: 5,
+        })?;
+
+    let related_memories_text = super::diary_memory::format_related_memories_for_prompt(&related_memories);
+
     // Build LLM prompt
     let events_text = format_events_for_prompt(&events);
     let turns_text = format_turns_for_prompt(&turns);
     let notes_text = format_notes_for_prompt(&user_notes);
     let memory_text = super::memory::format_memory_for_prompt(&core_memory);
 
-    let prompt = build_diary_prompt(date, &events_text, &turns_text, &notes_text, &memory_text, true);
+    let prompt = build_diary_prompt(
+        date,
+        &events_text,
+        &turns_text,
+        &notes_text,
+        &memory_text,
+        true,
+        related_memories_text.as_deref(),
+    );
 
     let messages = vec![ChatMessage {
         role: "user".to_string(),
@@ -515,6 +543,15 @@ async fn generate_diary_inner(
     // Save diary note
     let store = default_store()?;
     let entry = save_diary_note(&store, date, &content, existing_note_id, is_regenerate)?;
+
+    // Record recall for related event memories that were surfaced to the prompt.
+    // Only record after successful diary generation and save.
+    for mem in &related_memories {
+        if let Some(ref event_id) = mem.event_id {
+            // Use a small recall boost consistent with diary generation.
+            let _ = db.record_recall(user_id, event_id, 0.2);
+        }
+    }
 
     Ok(DiaryGenerateResult {
         date: date.to_string(),
@@ -620,7 +657,7 @@ mod tests {
 
     #[test]
     fn test_build_diary_prompt_no_data() {
-        let prompt = build_diary_prompt("2026-05-30", "", "", "", "", false);
+        let prompt = build_diary_prompt("2026-05-30", "", "", "", "", false, None);
         assert!(prompt.is_empty());
     }
 
@@ -633,6 +670,7 @@ mod tests {
             "### 1. 想法\n\n今天的一些思考",
             "用户画像: 程序员",
             true,
+            None,
         );
         assert!(prompt.contains("# 2026-05-30"));
         assert!(prompt.contains("面试事件"));
@@ -750,6 +788,7 @@ mod tests {
             "",
             "",
             true,
+            None,
         );
         // The final instruction should contain the actual date, not the literal "{date}"
         assert!(!prompt.contains("{date}"), "prompt should not contain literal {{date}}: {prompt}");
@@ -787,5 +826,35 @@ mod tests {
         assert!(formatted.contains("已截断"));
         // Should not include the full 2000 chars
         assert!(formatted.len() < 2000);
+    }
+
+    #[test]
+    fn test_build_diary_prompt_with_related_memories() {
+        let related = "--- 可能相关的过往记忆 ---\n这些记忆可能与今天有关。\n- [2026-05-20] 用户参加了面试 (topic: career)\n---\n";
+        let prompt = build_diary_prompt(
+            "2026-05-30",
+            "1. 面试事件",
+            "",
+            "",
+            "",
+            true,
+            Some(related),
+        );
+        assert!(prompt.contains("可能相关的过往记忆"), "should include related memories section");
+        assert!(prompt.contains("[2026-05-20]"), "should include related memory date");
+    }
+
+    #[test]
+    fn test_build_diary_prompt_without_related_memories() {
+        let prompt = build_diary_prompt(
+            "2026-05-30",
+            "1. 面试事件",
+            "",
+            "",
+            "",
+            true,
+            None,
+        );
+        assert!(!prompt.contains("可能相关的过往记忆"), "should NOT include related memories section");
     }
 }
