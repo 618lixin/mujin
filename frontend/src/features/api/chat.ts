@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { ChatMessage, ChatSendResult } from "./types";
+import type { ChatDaySummary, ChatMessage, ChatSendResult } from "./types";
 import { DEFAULT_USER_ID } from "./types";
 
 export function sendChatMessage(
@@ -13,10 +13,14 @@ export function startChatStream(message: string, userId = DEFAULT_USER_ID): Prom
   return invoke("chat_stream_start", { userId, message });
 }
 
-export function getChatHistory(userId = DEFAULT_USER_ID): Promise<ChatMessage[]> {
-  return invoke("ai_get_history", { userId });
+export function getChatDays(userId = DEFAULT_USER_ID): Promise<ChatDaySummary[]> {
+  return invoke("ai_get_chat_days", { userId });
 }
 
-export function clearChatHistory(userId = DEFAULT_USER_ID): Promise<void> {
-  return invoke("ai_clear_history", { userId });
+export function getChatHistory(userId = DEFAULT_USER_ID, date?: string): Promise<ChatMessage[]> {
+  return invoke("ai_get_history", { userId, date: date ?? null });
+}
+
+export function clearChatHistory(userId = DEFAULT_USER_ID, date?: string): Promise<void> {
+  return invoke("ai_clear_history", { userId, date: date ?? null });
 }

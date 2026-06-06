@@ -1,45 +1,93 @@
-## ADDED Requirements
+## Purpose
+Define the current Tauri/Rust chat loop, including prompt assembly, streaming behavior, post-chat memory deposition, and daily chat history management.
 
-### Requirement: Chat API endpoint
-系统 SHALL 提供 POST /api/chat 端点，接受用户消息并返回 AI 回复。
+## Requirements
 
-#### Scenario: Successful chat turn
-- **WHEN** 用户发送 POST /api/chat 包含 message 和可选的 session_id
-- **THEN** 系统返回 AI 回复文本和 session_id
+### Requirement: Tauri chat commands
+The system SHALL provide chat capability through Tauri commands rather than the old Python/FastAPI REST endpoint.
 
-#### Scenario: Chat with new session
-- **WHEN** 用户发送消息但未提供 session_id
-- **THEN** 系统创建新会话并返回新的 session_id
+#### Scenario: Non-streaming chat turn
+- **WHEN** the frontend calls `chat_send` with `user_id` and `message`
+- **THEN** the system returns the AI reply, emotion extraction result, and current turn count
+
+#### Scenario: Streaming chat turn
+- **WHEN** the frontend calls `chat_stream_start` with `user_id` and `message`
+- **THEN** the system returns a `stream_id` and emits streaming result events through `chat-token`, `chat-done`, and `chat-error`
 
 ### Requirement: Prompt assembly
-每轮对话的 prompt SHALL 按以下顺序组装：system prompt（角色定义）→ 核心记忆注入 → 人格权重描述 → 对话历史 → 用户当前消息。
+Each chat prompt SHALL be assembled by the current Tauri/Rust implementation in this order: role definition, core memory, relevant historical memory, recent rolling chat history, and the current user message.
 
 #### Scenario: Full prompt assembly
-- **WHEN** 构建对话请求
-- **THEN** prompt 包含：角色定义 + user_profile.md 内容 + companion_notes.md 内容 + 当前八维权重描述 + 最近 N 轮对话历史 + 用户消息
+- **WHEN** the system builds a chat request
+- **THEN** the system prompt includes the natural friend-style role definition, `user_profile.md`, `companion_notes.md`, and available relevant historical memory
 
-#### Scenario: No conversation history
-- **WHEN** 新会话的第一轮对话
-- **THEN** prompt 包含角色定义 + 核心记忆 + 人格权重 + 用户消息，对话历史部分为空
+#### Scenario: Retrieved memories available
+- **WHEN** the current message matches historical conversations or recent important events
+- **THEN** the system prompt includes a related historical memory section
+
+#### Scenario: No retrieved memories
+- **WHEN** no related historical memory is available
+- **THEN** the system prompt still includes role definition and core memory, and continues the chat
 
 ### Requirement: Post-chat pipeline
-每轮对话完成后，系统 SHALL 按顺序执行：情绪识别 → 事件记忆写入（如重要性 ≥0.6）→ Reinforcement/Compensation 权重调整 → Reflection 检查（是否触发）→ 日记数据累积。
+After each completed chat turn, the system SHALL execute the implemented post-chat pipeline: save rolling history, update turn counter, extract emotion/events, save `conversation_turns`, save important events, link topics, and save last activity.
 
-#### Scenario: Post-chat with significant event
-- **WHEN** AI 回复后，情绪识别发现 importance ≥0.6 的事件
-- **THEN** 系统写入事件记忆并执行权重调整
+#### Scenario: Significant event saved
+- **WHEN** emotion extraction returns `importance >= 0.6` and an `event_type`
+- **THEN** the system writes an event memory and attempts to link extracted topics
 
-#### Scenario: Post-chat with routine conversation
-- **WHEN** AI 回复后，情绪识别发现 importance <0.6
-- **THEN** 系统仅执行轻量权重调整，不写入事件记忆
+#### Scenario: Routine conversation
+- **WHEN** emotion extraction does not reach the important event threshold
+- **THEN** the system saves the conversation turn and rolling history but does not write an event memory
+
+#### Scenario: Reflection not yet implemented
+- **WHEN** the post-chat pipeline completes
+- **THEN** `reflection` and `notes_update` currently return `None` until Reflection/Notes automatic update is implemented
 
 ### Requirement: Conversation history management
-系统 SHALL 保留最近 20 轮对话历史用于 prompt 组装，更早的历史通过事件记忆和核心记忆保留关键信息。
+The system SHALL retain the most recent `max_history_turns` turns of the current day's rolling conversation for prompt assembly. Earlier content SHALL rely on deposited `conversation_turns`, event memory, and core memory retrieval.
 
 #### Scenario: History within limit
-- **WHEN** 对话轮数 ≤20
-- **THEN** 全部历史注入 prompt
+- **WHEN** the current day's conversation history has not exceeded `max_history_turns`
+- **THEN** the full current-day rolling history is injected into the prompt
 
 #### Scenario: History exceeds limit
-- **WHEN** 对话轮数 >20
-- **THEN** 仅最近 20 轮注入 prompt，更早历史通过记忆系统检索
+- **WHEN** the current day's conversation history exceeds `max_history_turns`
+- **THEN** only the most recent history is retained for prompt assembly, while earlier content relies on deposited memory retrieval
+
+### Requirement: Daily chat conversations
+The system SHALL organize short-term chat history into one conversation per user per local calendar date.
+
+#### Scenario: Today's conversation is selected by default
+- **WHEN** the user opens the chat page
+- **THEN** the system loads the conversation for the current local date
+
+#### Scenario: First message creates today's conversation
+- **WHEN** the user sends the first message on a local date with no existing chat history
+- **THEN** the system creates that date's conversation automatically
+
+#### Scenario: Prior days do not enter today's rolling prompt history
+- **WHEN** the user sends a message today after chatting on a prior date
+- **THEN** the rolling chat history injected into the prompt MUST only include today's conversation history
+
+### Requirement: Chat history date list
+The system SHALL expose a per-user list of dates that have chat history so the chat page can display a history area.
+
+#### Scenario: History area lists dated conversations
+- **WHEN** the user has chat history on multiple dates
+- **THEN** the chat page shows those dates in reverse chronological order
+
+#### Scenario: Selecting a prior date
+- **WHEN** the user selects a prior date in the history area
+- **THEN** the chat page displays that date's conversation without appending new messages to it
+
+### Requirement: Legacy chat history compatibility
+The system SHALL preserve access to the existing single-file chat history format during the transition to dated conversations without incorrectly treating older legacy history as today's conversation.
+
+#### Scenario: Legacy history appears under its own date
+- **WHEN** the old single `history.json` file exists
+- **THEN** the system lists that legacy conversation under the file's local modified date
+
+#### Scenario: New writes use dated storage
+- **WHEN** a chat turn is saved after daily history support is enabled
+- **THEN** the system writes the conversation to the dated history storage

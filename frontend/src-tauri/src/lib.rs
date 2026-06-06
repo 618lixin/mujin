@@ -330,16 +330,34 @@ fn ai_delete_event(app: AppHandle, user_id: String, event_id: String) -> Result<
 }
 
 #[tauri::command]
-fn ai_get_history(user_id: String) -> Result<Vec<services::types::ChatMessage>, AppError> {
+fn ai_get_chat_days(user_id: String) -> Result<Vec<services::types::ChatDaySummary>, AppError> {
     let base_dir = default_base_dir()?;
-    let config = services::config::load_ai_config(&base_dir)?;
-    services::memory::load_history(&base_dir, &user_id, config.max_history_turns)
+    services::memory::list_history_days(&base_dir, &user_id)
 }
 
 #[tauri::command]
-fn ai_clear_history(user_id: String) -> Result<(), AppError> {
+fn ai_get_history(
+    user_id: String,
+    date: Option<String>,
+) -> Result<Vec<services::types::ChatMessage>, AppError> {
     let base_dir = default_base_dir()?;
-    services::memory::save_history(&base_dir, &user_id, &[], 20)
+    let config = services::config::load_ai_config(&base_dir)?;
+    match date {
+        Some(value) => services::memory::load_history_for_date(
+            &base_dir,
+            &user_id,
+            &value,
+            config.max_history_turns,
+        ),
+        None => services::memory::load_history(&base_dir, &user_id, config.max_history_turns),
+    }
+}
+
+#[tauri::command]
+fn ai_clear_history(user_id: String, date: Option<String>) -> Result<(), AppError> {
+    let base_dir = default_base_dir()?;
+    let target_date = date.unwrap_or_else(services::memory::current_history_date);
+    services::memory::clear_history_for_date(&base_dir, &user_id, &target_date)
 }
 
 #[tauri::command]
@@ -439,14 +457,7 @@ async fn ai_generate_diary(
         guard.clone()
     };
 
-    services::diary::generate_diary(
-        &base_dir,
-        &db,
-        &client,
-        &user_id,
-        date,
-    )
-    .await
+    services::diary::generate_diary(&base_dir, &db, &client, &user_id, date).await
 }
 
 #[tauri::command]
@@ -481,14 +492,7 @@ async fn ai_regenerate_diary(
         guard.clone()
     };
 
-    services::diary::regenerate_diary(
-        &base_dir,
-        &db,
-        &client,
-        &user_id,
-        date,
-    )
-    .await
+    services::diary::regenerate_diary(&base_dir, &db, &client, &user_id, date).await
 }
 
 // ─── App Entry Point ──────────────────────────────────────────────────────
@@ -562,6 +566,7 @@ pub fn run() {
             ai_patch_core_memory,
             ai_get_events,
             ai_delete_event,
+            ai_get_chat_days,
             ai_get_history,
             ai_clear_history,
             ai_get_observations,

@@ -569,7 +569,11 @@ mod tests {
         let input: String = std::iter::repeat("你好").take(100).collect::<String>();
         let escaped = escape_fts5_query(&input);
         // Should be truncated to 120 chars, plus 2 quote chars
-        assert!(escaped.chars().count() <= 122, "got {} chars", escaped.chars().count());
+        assert!(
+            escaped.chars().count() <= 122,
+            "got {} chars",
+            escaped.chars().count()
+        );
     }
 
     #[test]
@@ -717,11 +721,17 @@ mod tests {
         let like_results = db
             .search_conversations_like("user1", "工作压力", 5)
             .unwrap();
-        assert!(!like_results.is_empty(), "LIKE should find Chinese keyword '工作压力'");
+        assert!(
+            !like_results.is_empty(),
+            "LIKE should find Chinese keyword '工作压力'"
+        );
 
         // ── Test 2: retrieve_memories high-level function ──
         let result = retrieve_memories(&db, "user1", "工作压力").unwrap();
-        assert!(result.is_some(), "retrieve_memories should find memories about work");
+        assert!(
+            result.is_some(),
+            "retrieve_memories should find memories about work"
+        );
         let text = result.unwrap();
         assert!(text.contains("相关历史记忆"), "got: {}", text);
 

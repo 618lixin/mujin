@@ -1,4 +1,7 @@
-## ADDED Requirements
+## Purpose
+Define the diary-specific related memory retrieval boundary used to connect daily diary generation with relevant past memories.
+
+## Requirements
 
 ### Requirement: Diary related memory retrieval module
 The system SHALL provide a diary-specific related memory retrieval module that returns past memories relevant to a target diary date.

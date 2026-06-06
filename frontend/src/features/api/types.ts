@@ -5,6 +5,11 @@ export interface ChatMessage {
   content: string;
 }
 
+export interface ChatDaySummary {
+  date: string;
+  messageCount: number;
+}
+
 export interface EmotionResult {
   emotions: string[];
   eventType?: string;

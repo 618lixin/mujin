@@ -34,7 +34,7 @@ Define how the desktop app generates, stores, lists, and regenerates AI-assisted
 
 #### Scenario: Diary already exists
 - **WHEN** 对应日期已有日记笔记
-- **THEN** `ai_generate_diary` SHALL 返回现有日记，且 `regenerated` 为 `false`
+- **THEN** `ai_generate_diary` SHALL 重新聚合最新素材、重新生成内容，并替换该日期已有日记
 
 ### Requirement: Diary regeneration
 系统 SHALL 支持重新生成指定日期日记并覆盖已有日记内容。
@@ -42,6 +42,17 @@ Define how the desktop app generates, stores, lists, and regenerates AI-assisted
 #### Scenario: Regenerate diary
 - **WHEN** 前端调用 `ai_regenerate_diary`
 - **THEN** 系统重新聚合素材、调用 LLM，并替换该日期已有日记内容
+
+### Requirement: Diary grounded writing style
+日记生成 SHALL 以当天对话摘要和用户随手笔记为主要依据，允许轻微整理和谨慎延伸，但不得编造未出现的情节。
+
+#### Scenario: Sparse source material
+- **WHEN** 当天素材很少或没有展开细节
+- **THEN** 生成内容 SHALL 保持简短，并使用「记录里没有展开」「似乎」「可能」等不确定表达，而不是补全故事细节
+
+#### Scenario: Rich source material
+- **WHEN** 当天对话和笔记提供了明确事实
+- **THEN** 生成内容 SHALL 基于这些事实组织日记，不添加未出现的人物、地点、动作、对白或戏剧化场景
 
 ### Requirement: Tauri diary commands
 系统 SHALL 通过 Tauri command 提供日记查询和生成能力。
@@ -53,8 +64,6 @@ Define how the desktop app generates, stores, lists, and regenerates AI-assisted
 #### Scenario: Get diary by date
 - **WHEN** 前端调用 `ai_get_diary`
 - **THEN** 返回对应日期的日记条目；不存在时返回 `None`
-
-## ADDED Requirements
 
 ### Requirement: Diary prompt includes optional related past memories
 Diary generation SHALL include an optional related past memories section when the retrieval module returns relevant memories.
@@ -77,6 +86,21 @@ The diary prompt SHALL instruct the LLM to use past related memories only when t
 #### Scenario: Strong relationship
 - **WHEN** a past memory clearly continues today's event, topic, or emotional thread
 - **THEN** the generated diary MAY connect today with that past memory in natural diary prose
+
+### Requirement: Diary generation avoids hallucinated events
+Diary generation SHALL treat same-day chat summaries and same-day user notes as the only sources that can establish today's facts.
+
+#### Scenario: Context-only sources
+- **WHEN** only same-day events, core memory, or related past memories are available
+- **THEN** the system SHALL NOT use them to invent concrete diary facts, causes, actions, dialogue, locations, decisions, outcomes, or relationship status
+
+#### Scenario: Sparse direct material
+- **WHEN** same-day chat summaries or notes contain only sparse material
+- **THEN** the generated diary SHALL remain sparse and MUST NOT compensate by adding plausible details
+
+#### Scenario: Low-creativity diary generation
+- **WHEN** the system calls the LLM to generate a diary
+- **THEN** it SHALL use a low-temperature generation setting suitable for factual rewriting rather than creative storytelling
 
 ### Requirement: Related memory recall tracking
 After successful diary generation, the system SHALL record recall for event memories that were surfaced in the related-memory prompt section.

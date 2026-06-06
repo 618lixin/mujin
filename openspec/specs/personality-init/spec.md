@@ -1,34 +1,33 @@
-## ADDED Requirements
+## Purpose
+Define lightweight user initialization for the current local-first desktop app.
 
-### Requirement: Personality initialization questionnaire
-系统 SHALL 提供一组初始化问卷，采集用户的人格基础信息，包括 MBTI 类型、情绪表达偏好、陪伴风格偏好、建议力度偏好、边界感偏好。
+## Requirements
 
-#### Scenario: First-time user completes questionnaire
-- **WHEN** 用户首次访问初始化端点并提供问卷回答
-- **THEN** 系统生成 user_profile.md 文件，包含结构化的用户画像信息
+### Requirement: Lightweight user initialization
+系统 SHALL 使用轻量初始化替代旧的 MBTI/人格问卷初始化。
 
-#### Scenario: Questionnaire with partial answers
-- **WHEN** 用户提交问卷但部分字段为空
-- **THEN** 系统 SHALL 为缺失字段使用默认值，并成功生成 user_profile.md
+#### Scenario: Initialize user
+- **WHEN** 前端调用 `ai_init_user` 并提供 `user_id`
+- **THEN** 系统创建用户目录并初始化 SQLite schema
 
-### Requirement: Initial personality weights
-系统 SHALL 根据用户 MBTI 类型生成初始八维人格权重向量（Ti/Te/Fi/Fe/Si/Se/Ni/Ne），每个权重为 0.0~1.0 的浮点数。
+#### Scenario: Re-initialize existing user
+- **WHEN** 用户目录和数据库已存在
+- **THEN** 初始化 SHALL 保持幂等，不破坏已有数据
 
-#### Scenario: INFP user initialization
-- **WHEN** 用户 MBTI 为 INFP
-- **THEN** 系统生成 Fi 主导（≥0.7）、Ne 辅助（≥0.5）的权重向量，其余维度较低（≤0.4）
+### Requirement: No MBTI-derived weights
+系统 SHALL NOT 根据 MBTI 生成八维人格权重。
 
-#### Scenario: MBTI not provided
-- **WHEN** 用户未提供 MBTI 类型
-- **THEN** 系统使用均匀分布的默认权重（每个维度 0.5）
+#### Scenario: User has no MBTI
+- **WHEN** 初始化用户
+- **THEN** 系统不要求 MBTI，也不创建 personality weights
 
-### Requirement: User profile file generation
-系统 SHALL 将用户画像持久化为 user_profile.md 文件，存储在 data/{user_id}/ 目录下，内容为纯文本格式，不超过 1200 字符。
+### Requirement: Profile remains editable memory
+用户画像 SHALL 作为核心记忆的一部分由 `user_profile.md` 管理，而不是由固定问卷一次性决定。
 
-#### Scenario: Profile file created
-- **WHEN** 初始化完成
-- **THEN** data/{user_id}/user_profile.md 文件存在且内容包含用户的关键画像信息
+#### Scenario: Empty profile after initialization
+- **WHEN** 用户刚初始化但尚未填写画像
+- **THEN** 核心记忆读取可以返回空 profile
 
-#### Scenario: Profile exceeds character limit
-- **WHEN** 生成的画像超过 1200 字符
-- **THEN** 系统 SHALL 压缩内容至 1200 字符以内再保存
+#### Scenario: Profile edited later
+- **WHEN** 前端调用 `ai_patch_core_memory`
+- **THEN** 系统更新 `user_profile.md`

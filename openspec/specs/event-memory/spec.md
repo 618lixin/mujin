@@ -73,8 +73,6 @@ Define structured long-term event memory, conversation search, forgetting behavi
 - **WHEN** 前端调用 `ai_delete_event`
 - **THEN** 删除该事件并返回是否成功
 
-## ADDED Requirements
-
 ### Requirement: Past event lookup for related diary memory
 Event memory SHALL expose retrieval primitives that can find past events related to diary source material while excluding the target diary date.
 

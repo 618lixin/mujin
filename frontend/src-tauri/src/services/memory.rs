@@ -2,7 +2,9 @@ use std::path::Path;
 
 use super::config::AiConfig;
 use super::notes::AppError;
-use super::types::{ChatMessage, CoreMemory, CoreMemoryResponse, CoreMemoryStats, MemoryPatch};
+use super::types::{
+    ChatDaySummary, ChatMessage, CoreMemory, CoreMemoryResponse, CoreMemoryStats, MemoryPatch,
+};
 
 // ─── Core Memory ──────────────────────────────────────────────────────────
 
@@ -215,26 +217,163 @@ fn history_path(base_dir: &Path, user_id: &str) -> Result<std::path::PathBuf, Ap
     Ok(user_dir(base_dir, user_id)?.join("history.json"))
 }
 
+fn legacy_history_date(base_dir: &Path, user_id: &str) -> Result<Option<String>, AppError> {
+    let path = history_path(base_dir, user_id)?;
+    if !path.exists() {
+        return Ok(None);
+    }
+
+    let modified = std::fs::metadata(&path)
+        .and_then(|metadata| metadata.modified())
+        .map_err(|e| AppError::new("io", format!("Failed to read legacy history time: {e}")))?;
+    let local_time: chrono::DateTime<chrono::Local> = modified.into();
+    Ok(Some(local_time.format("%Y-%m-%d").to_string()))
+}
+
+fn history_dir(base_dir: &Path, user_id: &str) -> Result<std::path::PathBuf, AppError> {
+    Ok(user_dir(base_dir, user_id)?.join("history"))
+}
+
+fn validate_history_date(date: &str) -> Result<(), AppError> {
+    let bytes = date.as_bytes();
+    let valid = bytes.len() == 10
+        && bytes[4] == b'-'
+        && bytes[7] == b'-'
+        && bytes
+            .iter()
+            .enumerate()
+            .all(|(i, b)| matches!(i, 4 | 7) || b.is_ascii_digit());
+
+    if valid {
+        Ok(())
+    } else {
+        Err(AppError::new(
+            "invalidDate",
+            "date must use YYYY-MM-DD format",
+        ))
+    }
+}
+
+fn dated_history_path(
+    base_dir: &Path,
+    user_id: &str,
+    date: &str,
+) -> Result<std::path::PathBuf, AppError> {
+    validate_history_date(date)?;
+    Ok(history_dir(base_dir, user_id)?.join(format!("{date}.json")))
+}
+
+pub fn current_history_date() -> String {
+    chrono::Local::now().format("%Y-%m-%d").to_string()
+}
+
+fn trim_history(messages: &[ChatMessage], max_turns: u32) -> Vec<ChatMessage> {
+    let max_msgs = (max_turns as usize) * 2;
+    if messages.len() > max_msgs {
+        messages[messages.len() - max_msgs..].to_vec()
+    } else {
+        messages.to_vec()
+    }
+}
+
+fn read_history_file(path: &Path, max_turns: u32) -> Result<Vec<ChatMessage>, AppError> {
+    let data = std::fs::read_to_string(path)
+        .map_err(|e| AppError::new("io", format!("Failed to read history: {e}")))?;
+    let all: Vec<ChatMessage> = serde_json::from_str(&data).unwrap_or_default();
+    Ok(trim_history(&all, max_turns))
+}
+
 pub fn load_history(
     base_dir: &Path,
     user_id: &str,
     max_turns: u32,
 ) -> Result<Vec<ChatMessage>, AppError> {
-    let path = history_path(base_dir, user_id)?;
-    if !path.exists() {
-        return Ok(vec![]);
+    let today = current_history_date();
+    load_history_for_date(base_dir, user_id, &today, max_turns)
+}
+
+pub fn load_history_for_date(
+    base_dir: &Path,
+    user_id: &str,
+    date: &str,
+    max_turns: u32,
+) -> Result<Vec<ChatMessage>, AppError> {
+    let path = dated_history_path(base_dir, user_id, date)?;
+    if path.exists() {
+        return read_history_file(&path, max_turns);
     }
 
-    let data = std::fs::read_to_string(&path)
-        .map_err(|e| AppError::new("io", format!("Failed to read history: {e}")))?;
-
-    let all: Vec<ChatMessage> = serde_json::from_str(&data).unwrap_or_default();
-    let max_msgs = (max_turns as usize) * 2;
-    if all.len() > max_msgs {
-        Ok(all[all.len() - max_msgs..].to_vec())
-    } else {
-        Ok(all)
+    let legacy_path = history_path(base_dir, user_id)?;
+    if legacy_history_date(base_dir, user_id)?.as_deref() == Some(date) && legacy_path.exists() {
+        return read_history_file(&legacy_path, max_turns);
     }
+
+    Ok(vec![])
+}
+
+pub fn save_history_for_date(
+    base_dir: &Path,
+    user_id: &str,
+    date: &str,
+    messages: &[ChatMessage],
+    max_turns: u32,
+) -> Result<(), AppError> {
+    let dir = history_dir(base_dir, user_id)?;
+    std::fs::create_dir_all(&dir).ok();
+
+    let to_save = trim_history(messages, max_turns);
+    let path = dated_history_path(base_dir, user_id, date)?;
+    let json = serde_json::to_string_pretty(&to_save)
+        .map_err(|e| AppError::new("parse", format!("Failed to serialize history: {e}")))?;
+    std::fs::write(path, json)
+        .map_err(|e| AppError::new("io", format!("Failed to write history: {e}")))?;
+
+    Ok(())
+}
+
+pub fn list_history_days(base_dir: &Path, user_id: &str) -> Result<Vec<ChatDaySummary>, AppError> {
+    let dir = history_dir(base_dir, user_id)?;
+    let mut days = Vec::new();
+
+    if dir.exists() {
+        for entry in std::fs::read_dir(&dir)
+            .map_err(|e| AppError::new("io", format!("Failed to read history dir: {e}")))?
+        {
+            let entry = entry
+                .map_err(|e| AppError::new("io", format!("Failed to read history entry: {e}")))?;
+            let path = entry.path();
+            if path.extension().and_then(|value| value.to_str()) != Some("json") {
+                continue;
+            }
+            let Some(stem) = path.file_stem().and_then(|value| value.to_str()) else {
+                continue;
+            };
+            if validate_history_date(stem).is_err() {
+                continue;
+            }
+            let messages = read_history_file(&path, u32::MAX)?;
+            days.push(ChatDaySummary {
+                date: stem.to_string(),
+                message_count: messages.len(),
+            });
+        }
+    }
+
+    let legacy_path = history_path(base_dir, user_id)?;
+    if legacy_path.exists() {
+        let legacy_date =
+            legacy_history_date(base_dir, user_id)?.unwrap_or_else(current_history_date);
+        let messages = read_history_file(&legacy_path, u32::MAX)?;
+        if !days.iter().any(|day| day.date == legacy_date) {
+            days.push(ChatDaySummary {
+                date: legacy_date,
+                message_count: messages.len(),
+            });
+        }
+    }
+
+    days.sort_by(|a, b| b.date.cmp(&a.date));
+    Ok(days)
 }
 
 pub fn save_history(
@@ -243,21 +382,24 @@ pub fn save_history(
     messages: &[ChatMessage],
     max_turns: u32,
 ) -> Result<(), AppError> {
-    let dir = user_dir(base_dir, user_id)?;
-    std::fs::create_dir_all(&dir).ok();
+    let today = current_history_date();
+    save_history_for_date(base_dir, user_id, &today, messages, max_turns)?;
 
-    let max_msgs = (max_turns as usize) * 2;
-    let to_save = if messages.len() > max_msgs {
-        &messages[messages.len() - max_msgs..]
-    } else {
-        messages
-    };
+    Ok(())
+}
 
-    let path = history_path(base_dir, user_id)?;
-    let json = serde_json::to_string_pretty(to_save)
-        .map_err(|e| AppError::new("parse", format!("Failed to serialize history: {e}")))?;
-    std::fs::write(path, json)
-        .map_err(|e| AppError::new("io", format!("Failed to write history: {e}")))?;
+pub fn clear_history_for_date(base_dir: &Path, user_id: &str, date: &str) -> Result<(), AppError> {
+    let path = dated_history_path(base_dir, user_id, date)?;
+    if path.exists() {
+        std::fs::remove_file(path)
+            .map_err(|e| AppError::new("io", format!("Failed to clear history: {e}")))?;
+    }
+
+    let legacy_path = history_path(base_dir, user_id)?;
+    if legacy_history_date(base_dir, user_id)?.as_deref() == Some(date) && legacy_path.exists() {
+        std::fs::remove_file(legacy_path)
+            .map_err(|e| AppError::new("io", format!("Failed to clear legacy history: {e}")))?;
+    }
 
     Ok(())
 }
@@ -463,6 +605,94 @@ mod tests {
         save_history(&dir, "user1", &messages, 20).unwrap();
         let loaded = load_history(&dir, "user1", 5).unwrap(); // only last 5 turns = 10 messages
         assert_eq!(loaded.len(), 10);
+    }
+
+    #[test]
+    fn test_daily_history_keeps_dates_isolated() {
+        let dir = test_dir();
+
+        let may_messages = vec![ChatMessage {
+            role: "user".to_string(),
+            content: "may second".to_string(),
+        }];
+        let june_messages = vec![ChatMessage {
+            role: "user".to_string(),
+            content: "june third".to_string(),
+        }];
+
+        save_history_for_date(&dir, "user1", "2026-05-02", &may_messages, 20).unwrap();
+        save_history_for_date(&dir, "user1", "2026-06-03", &june_messages, 20).unwrap();
+
+        let may_loaded = load_history_for_date(&dir, "user1", "2026-05-02", 20).unwrap();
+        let june_loaded = load_history_for_date(&dir, "user1", "2026-06-03", 20).unwrap();
+
+        assert_eq!(may_loaded[0].content, "may second");
+        assert_eq!(june_loaded[0].content, "june third");
+    }
+
+    #[test]
+    fn test_legacy_history_falls_back_for_today_only() {
+        let dir = test_dir();
+        let today = current_history_date();
+        let legacy_messages = vec![ChatMessage {
+            role: "user".to_string(),
+            content: "legacy today".to_string(),
+        }];
+
+        let legacy_path = history_path(&dir, "user1").unwrap();
+        std::fs::create_dir_all(legacy_path.parent().unwrap()).unwrap();
+        std::fs::write(
+            &legacy_path,
+            serde_json::to_string(&legacy_messages).unwrap(),
+        )
+        .unwrap();
+
+        let today_loaded = load_history_for_date(&dir, "user1", &today, 20).unwrap();
+        let old_loaded = load_history_for_date(&dir, "user1", "2026-01-01", 20).unwrap();
+
+        assert_eq!(today_loaded[0].content, "legacy today");
+        assert!(old_loaded.is_empty());
+    }
+
+    #[test]
+    fn test_list_history_days_includes_legacy_history_date() {
+        let dir = test_dir();
+        let today = current_history_date();
+        let legacy_messages = vec![ChatMessage {
+            role: "user".to_string(),
+            content: "legacy message".to_string(),
+        }];
+
+        let legacy_path = history_path(&dir, "user1").unwrap();
+        std::fs::create_dir_all(legacy_path.parent().unwrap()).unwrap();
+        std::fs::write(
+            &legacy_path,
+            serde_json::to_string(&legacy_messages).unwrap(),
+        )
+        .unwrap();
+
+        let days = list_history_days(&dir, "user1").unwrap();
+
+        assert_eq!(days[0].date, today);
+        assert_eq!(days[0].message_count, 1);
+    }
+
+    #[test]
+    fn test_list_history_days_sorts_reverse_chronological() {
+        let dir = test_dir();
+        let messages = vec![ChatMessage {
+            role: "user".to_string(),
+            content: "hello".to_string(),
+        }];
+
+        save_history_for_date(&dir, "user1", "2026-05-02", &messages, 20).unwrap();
+        save_history_for_date(&dir, "user1", "2026-06-03", &messages, 20).unwrap();
+
+        let days = list_history_days(&dir, "user1").unwrap();
+
+        assert_eq!(days[0].date, "2026-06-03");
+        assert_eq!(days[1].date, "2026-05-02");
+        assert_eq!(days[0].message_count, 1);
     }
 
     #[test]

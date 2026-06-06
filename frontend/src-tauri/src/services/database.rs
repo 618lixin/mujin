@@ -864,7 +864,9 @@ impl DbState {
 
         let mut results = Vec::new();
         for row in rows {
-            results.push(row.map_err(|e| AppError::new("db", format!("Failed to read topic_id: {e}")))?);
+            results.push(
+                row.map_err(|e| AppError::new("db", format!("Failed to read topic_id: {e}")))?,
+            );
         }
         Ok(results)
     }
@@ -946,7 +948,9 @@ impl DbState {
                 "SELECT * FROM events WHERE content LIKE ?1
                  ORDER BY created_at DESC LIMIT ?2",
             )
-            .map_err(|e| AppError::new("db", format!("Failed to prepare event LIKE search: {e}")))?;
+            .map_err(|e| {
+                AppError::new("db", format!("Failed to prepare event LIKE search: {e}"))
+            })?;
 
         let rows = stmt
             .query_map(params![pattern, limit as i64], |row| {
@@ -973,9 +977,9 @@ impl DbState {
 
         let mut results = Vec::new();
         for row in rows {
-            results.push(
-                row.map_err(|e| AppError::new("db", format!("Failed to read event LIKE result: {e}")))?,
-            );
+            results.push(row.map_err(|e| {
+                AppError::new("db", format!("Failed to read event LIKE result: {e}"))
+            })?);
         }
         Ok(results)
     }
@@ -1310,12 +1314,7 @@ impl DbState {
                  WHERE created_at >= ?1 AND created_at <= ?2
                  ORDER BY created_at ASC LIMIT ?3",
             )
-            .map_err(|e| {
-                AppError::new(
-                    "db",
-                    format!("Failed to prepare turns by date: {e}"),
-                )
-            })?;
+            .map_err(|e| AppError::new("db", format!("Failed to prepare turns by date: {e}")))?;
 
         let rows = stmt
             .query_map(params![utc_start, utc_end, limit as i64], |row| {
@@ -1328,9 +1327,7 @@ impl DbState {
                     created_at: row.get("created_at").unwrap_or_default(),
                 })
             })
-            .map_err(|e| {
-                AppError::new("db", format!("Failed to query turns by date: {e}"))
-            })?;
+            .map_err(|e| AppError::new("db", format!("Failed to query turns by date: {e}")))?;
 
         let mut results = Vec::new();
         for row in rows {

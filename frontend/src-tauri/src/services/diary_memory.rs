@@ -86,7 +86,8 @@ pub fn retrieve_related_diary_memories(
     let mut seen_event_ids: std::collections::HashSet<String> = std::collections::HashSet::new();
 
     // Layer 1: Topic-linked past events.
-    let topic_results = query_events_by_topics(db, query.user_id, &day_topic_ids, &utc_cutoff, max * 2)?;
+    let topic_results =
+        query_events_by_topics(db, query.user_id, &day_topic_ids, &utc_cutoff, max * 2)?;
     for (event, topic_name) in &topic_results {
         // Dedup: same event may be linked to multiple topics — keep first (highest-score) occurrence.
         if !seen_event_ids.insert(event.id.clone()) {
@@ -110,9 +111,8 @@ pub fn retrieve_related_diary_memories(
 
     // Layer 2: Keyword fallback on past events.
     if candidates.len() < max {
-        let keyword_events = query_events_by_keywords(
-            db, query.user_id, &anchors, &utc_cutoff, max * 2,
-        )?;
+        let keyword_events =
+            query_events_by_keywords(db, query.user_id, &anchors, &utc_cutoff, max * 2)?;
         for event in &keyword_events {
             if !seen_event_ids.insert(event.id.clone()) {
                 continue;
@@ -136,9 +136,7 @@ pub fn retrieve_related_diary_memories(
 
     // Layer 3: Keyword fallback on past conversation summaries.
     if candidates.len() < max {
-        let keyword_turns = query_turns_by_keywords(
-            db, query.user_id, &anchors, &utc_cutoff, max,
-        )?;
+        let keyword_turns = query_turns_by_keywords(db, query.user_id, &anchors, &utc_cutoff, max)?;
         for turn in &keyword_turns {
             let score = score_candidate(
                 false,
@@ -179,7 +177,11 @@ pub fn retrieve_related_diary_memories(
     }
 
     // Sort by score descending, cap at max.
-    candidates.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+    candidates.sort_by(|a, b| {
+        b.score
+            .partial_cmp(&a.score)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
     candidates.truncate(max);
 
     Ok(candidates)
@@ -195,7 +197,9 @@ pub fn format_related_memories_for_prompt(memories: &[RelatedDiaryMemory]) -> Op
     }
 
     let mut block = String::from("--- 可能相关的过往记忆 ---\n");
-    block.push_str("这些记忆可能与今天有关。只有当联系自然、能被材料支持时才写进日记；不要硬凑因果。\n\n");
+    block.push_str(
+        "这些记忆可能与今天有关。只有当联系自然、能被材料支持时才写进日记；不要硬凑因果。\n\n",
+    );
 
     for mem in memories {
         block.push_str(&format!(
@@ -231,11 +235,7 @@ fn local_date_cutoff(diary_date: &str) -> String {
 }
 
 /// Collect topic IDs linked to the given events.
-fn collect_topic_ids_for_events(
-    db: &DbState,
-    user_id: &str,
-    events: &[Event],
-) -> Vec<String> {
+fn collect_topic_ids_for_events(db: &DbState, user_id: &str, events: &[Event]) -> Vec<String> {
     let mut topic_ids = Vec::new();
     for event in events {
         // For each event, look up topic_links where item_id = event.id.
@@ -301,8 +301,16 @@ fn score_candidate(
     strength: f64,
     created_at: &str,
 ) -> f64 {
-    let topic_score = if is_topic_match { WEIGHT_TOPIC_MATCH } else { 0.0 };
-    let keyword_score = if is_keyword_match { WEIGHT_KEYWORD_MATCH } else { 0.0 };
+    let topic_score = if is_topic_match {
+        WEIGHT_TOPIC_MATCH
+    } else {
+        0.0
+    };
+    let keyword_score = if is_keyword_match {
+        WEIGHT_KEYWORD_MATCH
+    } else {
+        0.0
+    };
     let importance_score = importance * WEIGHT_IMPORTANCE;
     let strength_score = strength * WEIGHT_STRENGTH;
 
@@ -470,10 +478,7 @@ mod tests {
     #[test]
     fn test_format_related_memories_empty() {
         let result = format_related_memories_for_prompt(&[]);
-        assert!(
-            result.is_none(),
-            "empty memories should return None"
-        );
+        assert!(result.is_none(), "empty memories should return None");
     }
 
     #[test]
@@ -497,14 +502,29 @@ mod tests {
 
         let result = format_related_memories_for_prompt(&memories).unwrap();
 
-        assert!(result.contains("可能相关的过往记忆"), "should contain header");
-        assert!(result.contains("不要硬凑因果"), "should contain conservative instruction");
+        assert!(
+            result.contains("可能相关的过往记忆"),
+            "should contain header"
+        );
+        assert!(
+            result.contains("不要硬凑因果"),
+            "should contain conservative instruction"
+        );
         assert!(result.contains("[2026-05-20]"), "should contain first date");
-        assert!(result.contains("[2026-05-18]"), "should contain second date");
+        assert!(
+            result.contains("[2026-05-18]"),
+            "should contain second date"
+        );
         assert!(result.contains("面试"), "should contain first content");
         assert!(result.contains("职业规划"), "should contain second content");
-        assert!(result.contains("topic: career"), "should contain first reason");
-        assert!(result.contains("keyword match"), "should contain second reason");
+        assert!(
+            result.contains("topic: career"),
+            "should contain first reason"
+        );
+        assert!(
+            result.contains("keyword match"),
+            "should contain second reason"
+        );
         assert!(result.starts_with("---"), "should start with separator");
     }
 
@@ -635,21 +655,13 @@ mod tests {
         let user_id = "test-user";
 
         // A past event linked to topic "career" (3 days ago).
-        let past_career_event = make_event(
-            "e_career",
-            "用户参加了面试",
-            0.6,
-            "2026-05-27T10:00:00Z",
-        );
+        let past_career_event =
+            make_event("e_career", "用户参加了面试", 0.6, "2026-05-27T10:00:00Z");
         db.add_event(user_id, &past_career_event, 30.0).unwrap();
 
         // A more recent but unrelated event (1 day ago, high importance).
-        let recent_unrelated = make_event(
-            "e_unrelated",
-            "用户去公园散步",
-            0.9,
-            "2026-05-29T10:00:00Z",
-        );
+        let recent_unrelated =
+            make_event("e_unrelated", "用户去公园散步", 0.9, "2026-05-29T10:00:00Z");
         db.add_event(user_id, &recent_unrelated, 30.0).unwrap();
 
         // Create topic "career" and link it to the past event.
@@ -662,17 +674,14 @@ mod tests {
             mention_count: 1,
         };
         db.add_topic(user_id, &topic).unwrap();
-        db.link_topic(user_id, "t_career", "e_career", "event").unwrap();
+        db.link_topic(user_id, "t_career", "e_career", "event")
+            .unwrap();
 
         // Today's event is about career — linked to same topic.
-        let today_event = make_event(
-            "e_today",
-            "用户收到了面试结果",
-            0.8,
-            "2026-05-30T10:00:00Z",
-        );
+        let today_event = make_event("e_today", "用户收到了面试结果", 0.8, "2026-05-30T10:00:00Z");
         // Also link today's event to the "career" topic.
-        db.link_topic(user_id, "t_career", "e_today", "event").unwrap();
+        db.link_topic(user_id, "t_career", "e_today", "event")
+            .unwrap();
 
         let query = DiaryMemoryQuery {
             user_id,
@@ -686,11 +695,18 @@ mod tests {
         let results = retrieve_related_diary_memories(&db, &query).unwrap();
 
         // The career event should appear (topic-linked).
-        let career_idx = results.iter().position(|r| r.event_id.as_deref() == Some("e_career"));
-        assert!(career_idx.is_some(), "topic-linked career event should be in results");
+        let career_idx = results
+            .iter()
+            .position(|r| r.event_id.as_deref() == Some("e_career"));
+        assert!(
+            career_idx.is_some(),
+            "topic-linked career event should be in results"
+        );
 
         // If unrelated event also appears, career must rank higher (lower index = higher score).
-        let unrelated_idx = results.iter().position(|r| r.event_id.as_deref() == Some("e_unrelated"));
+        let unrelated_idx = results
+            .iter()
+            .position(|r| r.event_id.as_deref() == Some("e_unrelated"));
         if let (Some(ci), Some(ui)) = (career_idx, unrelated_idx) {
             assert!(
                 ci < ui,
@@ -715,21 +731,11 @@ mod tests {
         db.add_event(user_id, &past_event, 30.0).unwrap();
 
         // An unrelated past event.
-        let other_event = make_event(
-            "e_other",
-            "用户去超市买了菜",
-            0.5,
-            "2026-05-24T10:00:00Z",
-        );
+        let other_event = make_event("e_other", "用户去超市买了菜", 0.5, "2026-05-24T10:00:00Z");
         db.add_event(user_id, &other_event, 30.0).unwrap();
 
         // No topics created at all. Today's event mentions 面试.
-        let today_event = make_event(
-            "e_today",
-            "用户收到了面试通知",
-            0.8,
-            "2026-05-30T10:00:00Z",
-        );
+        let today_event = make_event("e_today", "用户收到了面试通知", 0.8, "2026-05-30T10:00:00Z");
 
         let query = DiaryMemoryQuery {
             user_id,
@@ -758,12 +764,7 @@ mod tests {
         let db = test_db();
         let user_id = "test-user";
 
-        let event = make_event(
-            "e1",
-            "用户参加了面试",
-            0.8,
-            "2026-05-25T10:00:00Z",
-        );
+        let event = make_event("e1", "用户参加了面试", 0.8, "2026-05-25T10:00:00Z");
         db.add_event(user_id, &event, 30.0).unwrap();
 
         // Initial recall count should be 0.
@@ -774,13 +775,23 @@ mod tests {
         // In this case, diary.rs would NOT call record_recall.
         // Verify that without calling record_recall, count stays at 0.
         let after = db.get_event_by_id(user_id, "e1").unwrap().unwrap();
-        assert_eq!(after.recall_count, 0, "recall should NOT be recorded when diary fails");
+        assert_eq!(
+            after.recall_count, 0,
+            "recall should NOT be recorded when diary fails"
+        );
 
         // Now simulate SUCCESS: record_recall IS called.
         db.record_recall(user_id, "e1", 0.2).unwrap();
         let after_recall = db.get_event_by_id(user_id, "e1").unwrap().unwrap();
-        assert_eq!(after_recall.recall_count, 1, "recall should be incremented after success");
-        assert!(after_recall.stability > 30.0, "stability should be boosted: {}", after_recall.stability);
+        assert_eq!(
+            after_recall.recall_count, 1,
+            "recall should be incremented after success"
+        );
+        assert!(
+            after_recall.stability > 30.0,
+            "stability should be boosted: {}",
+            after_recall.stability
+        );
     }
 
     /// Task 4.3: Related memories without event_id do not attempt recall.
@@ -796,15 +807,11 @@ mod tests {
             "加油，你可以的",
             Some("用户聊到了面试的事情"),
             &[],
-        ).unwrap();
+        )
+        .unwrap();
 
         // Today's event.
-        let today_event = make_event(
-            "e_today",
-            "用户收到了面试通知",
-            0.8,
-            "2026-05-30T10:00:00Z",
-        );
+        let today_event = make_event("e_today", "用户收到了面试通知", 0.8, "2026-05-30T10:00:00Z");
 
         let query = DiaryMemoryQuery {
             user_id,

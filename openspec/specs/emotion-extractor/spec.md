@@ -1,52 +1,55 @@
-## ADDED Requirements
+## Purpose
+Define how the system extracts structured emotions, events, summaries, and topics from chat turns.
 
-### Requirement: Emotion extraction from message
-系统 SHALL 在每轮对话后调用 LLM 从用户消息和 AI 回复中提取情绪标签、事件类型和重要性评分。
+## Requirements
+
+### Requirement: Emotion and event extraction
+系统 SHALL 在每轮对话后调用 LLM，从用户消息和 AI 回复中提取情绪标签、事件类型、重要性评分、摘要和主题。
 
 #### Scenario: Extract emotions from emotional message
-- **WHEN** 用户消息包含明显情绪表达（如"我好难过"、"我崩溃了"）
-- **THEN** 返回 emotions 包含对应标签（如 ["sadness"]）、importance ≥0.7
+- **WHEN** 用户消息包含明显情绪表达
+- **THEN** 返回对应 emotions、`importance` 和一句话 `summary`
 
 #### Scenario: Extract from neutral message
-- **WHEN** 用户消息为日常对话（如"今天天气不错"）
-- **THEN** 返回 emotions 为空、importance <0.3、event_type 为 null
+- **WHEN** 用户消息为日常对话或低信息闲聊
+- **THEN** 返回空 emotions、低 importance、`event_type = null`
 
 ### Requirement: Emotion labels
-系统 SHALL 使用预定义的情绪标签集：joy, sadness, anger, anxiety, fear, surprise, disgust, calm, overwhelm, hope。每条提取结果可包含多个标签。
+系统 SHALL 使用预定义情绪标签集：`joy`、`sadness`、`anger`、`anxiety`、`fear`、`surprise`、`disgust`、`calm`、`overwhelm`、`hope`。
 
 #### Scenario: Multiple emotions
-- **WHEN** 用户消息同时表达悲伤和愤怒（如"他太过分了，我好难过"）
-- **THEN** 返回 emotions: ["sadness", "anger"]
+- **WHEN** 用户消息同时表达多种情绪
+- **THEN** 返回多个合法 emotions 标签
+
+#### Scenario: Invalid emotion label
+- **WHEN** LLM 返回未定义情绪标签
+- **THEN** 系统过滤该标签
 
 ### Requirement: Event type classification
-系统 SHALL 将识别到的事件分类为以下类型之一：conflict（冲突）、milestone（里程碑）、emotion（情绪事件）、decision（决策）。当无明确事件时返回 null。
+系统 SHALL 将识别到的事件分类为 `conflict`、`milestone`、`emotion`、`decision` 之一；无明确事件时返回 `null`。
 
 #### Scenario: Conflict event
 - **WHEN** 用户描述与他人的矛盾
-- **THEN** event_type 为 "conflict"
+- **THEN** `event_type` 为 `conflict`
 
-#### Scenario: Milestone event
-- **WHEN** 用户描述一个重要转变或成就
-- **THEN** event_type 为 "milestone"
+#### Scenario: Decision event
+- **WHEN** 用户描述重要选择或决定
+- **THEN** `event_type` 为 `decision`
 
-#### Scenario: No event
-- **WHEN** 对话为闲聊或日常问答
-- **THEN** event_type 为 null
+### Requirement: Topic extraction
+系统 SHALL 从重要对话中抽取 topics，用于后续主题表和事件主题关联。
 
-### Requirement: Importance scoring
-系统 SHALL 为每次提取结果生成 0.0~1.0 的重要性评分。评分基于情绪强度、事件影响范围、是否涉及人生重大变化。
+#### Scenario: Topics found
+- **WHEN** 用户消息包含可持续追踪的主题
+- **THEN** 抽取结果包含 topics 数组
 
-#### Scenario: High importance event
-- **WHEN** 用户描述分手、失业、重大决策等
-- **THEN** importance ≥0.8
-
-#### Scenario: Low importance event
-- **WHEN** 用户描述日常小事或一般性讨论
-- **THEN** importance <0.3
+#### Scenario: No topics found
+- **WHEN** 对话没有稳定主题
+- **THEN** topics SHALL 为空数组
 
 ### Requirement: Extraction output structure
-情绪识别 SHALL 返回结构化 JSON：{"emotions": [...], "event_type": "...|null", "importance": 0.0~1.0, "summary": "一句话摘要"}。
+情绪抽取 SHALL 返回结构化 JSON：`emotions`、`event_type`、`importance`、`summary`、`topics`。
 
 #### Scenario: Full extraction output
-- **WHEN** 情绪识别完成
-- **THEN** 返回包含 emotions 数组、event_type 字符串或 null、importance 浮点数、summary 字符串的 JSON 对象
+- **WHEN** 情绪抽取完成
+- **THEN** 返回可反序列化为 `EmotionResult` 的 JSON 对象

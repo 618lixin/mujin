@@ -9,6 +9,16 @@ use super::types::{ChatMessage, DiaryEntry, DiaryGenerateResult};
 /// Maximum number of events/turns to include as source data for diary generation.
 const MAX_SOURCE_EVENTS: usize = 100;
 const MAX_SOURCE_TURNS: usize = 200;
+const DIARY_TEMPERATURE: f64 = 0.2;
+
+const DIARY_ANTI_HALLUCINATION_RULES: &str = r#"ANTI-HALLUCINATION RULES (highest priority):
+- Write only facts that are explicitly present in same-day chat summaries or same-day user notes.
+- Events, core memory, and related past memories are context only; they must not create new facts for today.
+- Do not infer a concrete event from an emotion, topic, or memory.
+- Do not invent causes, timelines, actions, dialogue, locations, decisions, outcomes, or relationship status.
+- If a sentence cannot be traced to the supplied same-day chat or note material, omit it.
+- If the same-day material is sparse, write a sparse diary. Do not compensate by adding plausible details.
+- It is acceptable to say that the day has too little material to write much."#;
 
 /// Validate a date string as YYYY-MM-DD.
 fn validate_date(date: &str) -> Result<(), AppError> {
@@ -25,24 +35,15 @@ fn validate_date(date: &str) -> Result<(), AppError> {
             format!("Invalid date format: '{date}'. Expected YYYY-MM-DD"),
         ));
     }
-    let year: i32 = parts[0].parse().map_err(|_| {
-        AppError::new(
-            "invalidDate",
-            format!("Invalid year in date: '{date}'"),
-        )
-    })?;
-    let month: u32 = parts[1].parse().map_err(|_| {
-        AppError::new(
-            "invalidDate",
-            format!("Invalid month in date: '{date}'"),
-        )
-    })?;
-    let day: u32 = parts[2].parse().map_err(|_| {
-        AppError::new(
-            "invalidDate",
-            format!("Invalid day in date: '{date}'"),
-        )
-    })?;
+    let year: i32 = parts[0]
+        .parse()
+        .map_err(|_| AppError::new("invalidDate", format!("Invalid year in date: '{date}'")))?;
+    let month: u32 = parts[1]
+        .parse()
+        .map_err(|_| AppError::new("invalidDate", format!("Invalid month in date: '{date}'")))?;
+    let day: u32 = parts[2]
+        .parse()
+        .map_err(|_| AppError::new("invalidDate", format!("Invalid day in date: '{date}'")))?;
     if !(2020..=2099).contains(&year) {
         return Err(AppError::new(
             "invalidDate",
@@ -89,8 +90,8 @@ fn validate_date(date: &str) -> Result<(), AppError> {
 fn local_date_to_utc_range(date: &str) -> (String, String) {
     use chrono::{Local, TimeZone, Utc};
 
-    let naive_date = chrono::NaiveDate::parse_from_str(date, "%Y-%m-%d")
-        .expect("date validated before call");
+    let naive_date =
+        chrono::NaiveDate::parse_from_str(date, "%Y-%m-%d").expect("date validated before call");
     let local_start = Local
         .from_local_datetime(&naive_date.and_hms_opt(0, 0, 0).unwrap())
         .unwrap();
@@ -172,16 +173,17 @@ fn build_diary_prompt(
     let mut parts = Vec::new();
 
     parts.push(format!(
-        "你是一个温暖、细心的日记助手。请根据以下用户今天的事件、对话摘要和笔记，生成一篇中文日记。\n\
+        "你是一个克制、准确的日记整理助手。请根据以下用户今天的事件、对话摘要和随手笔记，生成一篇中文日记。\n\
          \n\
-         要求：\n\
+         硬性要求：\n\
          - 日记使用 Markdown 格式。\n\
          - 以 `# {date}` 开头。\n\
-         - 语言温暖、自然、平实。\n\
-         - 基于提供的事件、对话摘要和笔记内容，不要编造。\n\
-         - 如有不确定，可以说「似乎」「可能」。\n\
-         - 如果数据不多，写短一些即可，不要凑字数。\n\
-         - 控制在 1200-1800 字左右。\n\
+         - 必须以“今天的对话摘要”和“今天的笔记”为主要依据；事件和过往记忆只作为辅助上下文。\n\
+         - 可以做轻微整理和谨慎延伸，但不得编造未出现的人物、地点、情节、动作、对白或具体心理活动。\n\
+         - 不要写成小说、故事或散文，不要添加戏剧化场景。\n\
+         - 如果材料没有明确说发生了什么，只能写「记录里没有展开」「似乎」「可能」，不要补全细节。\n\
+         - 如果数据不多，写短一些即可，不要凑字数；优先准确，其次才是文采。\n\
+         - 控制在 600-1200 字左右。\n\
          \n\
          --- 日记内容 ---\n\
          \n\
@@ -189,6 +191,24 @@ fn build_diary_prompt(
          \n\
          今天你..."
     ));
+
+    parts.push(
+        "写作风格要求（优先级最高）：\n\
+         - 日记要自然像本人写下来的日记，不要像 AI 资料整理。\n\
+         - 不要写成资料汇总、复盘报告或事实核查。\n\
+         - 不要在正文里写“笔记里”。\n\
+         - 不要在正文里写“对话里”。\n\
+         - 不要在正文里写“重要事件里”。\n\
+         - 不要在正文里写“记忆里”。\n\
+         - 不要在正文里写“记录显示”“根据材料”。\n\
+         - 不要把矛盾分析过程写出来；如果事件、笔记、记忆之间不一致，静默采用今天的笔记和对话，忽略不可靠的信息。\n\
+         - 可以把过往记忆化成一句自然的背景感受，例如“之前一直悬着的那件事终于落地了”，但不要标日期、不要解释来源。\n\
+         - 语气可以有一点松动、生活感和自嘲；允许短句，允许情绪上的停顿。\n\
+         - 正文只输出日记成品，不输出分析、清单、证据判断或写作说明。"
+            .to_string(),
+    );
+
+    parts.push(DIARY_ANTI_HALLUCINATION_RULES.to_string());
 
     if !core_memory.is_empty() {
         parts.push(format!("--- 用户背景 ---\n\n{}", core_memory));
@@ -305,7 +325,10 @@ fn format_notes_for_prompt(notes: &[(String, String)]) -> String {
         .map(|(i, (title, content))| {
             // Truncate very long notes to keep prompt manageable
             let preview = if content.chars().count() > 800 {
-                format!("{}…（以下内容过长，已截断）", &content.chars().take(800).collect::<String>())
+                format!(
+                    "{}…（以下内容过长，已截断）",
+                    &content.chars().take(800).collect::<String>()
+                )
             } else {
                 content.clone()
             };
@@ -318,6 +341,14 @@ fn format_notes_for_prompt(notes: &[(String, String)]) -> String {
 /// Build the empty-day diary markdown.
 fn empty_day_diary(date: &str) -> String {
     format!("# {date}\n\n今天还没有足够的记录生成日记。\n")
+}
+
+fn has_direct_diary_sources(
+    turns: &[super::types::ConversationTurn],
+    notes: &[(String, String)],
+) -> bool {
+    turns.iter().any(|turn| !turn.summary.trim().is_empty())
+        || notes.iter().any(|(_, content)| !content.trim().is_empty())
 }
 
 /// Create or update a diary note in the "diary" category.
@@ -371,7 +402,8 @@ fn save_diary_note(
 // ─── Public API ────────────────────────────────────────────────────────────
 
 /// Generate a diary for the given date (or today if date is None).
-/// Idempotent: if a diary already exists for the date, returns the existing one.
+/// If a diary already exists for the date, regenerate and replace it so later
+/// conversations and notes are reflected without manual deletion.
 pub async fn generate_diary(
     base_dir: &Path,
     db: &super::database::DbState,
@@ -385,21 +417,18 @@ pub async fn generate_diary(
     let store = default_store()?;
     let config = load_ai_config(base_dir)?;
 
-    // Check idempotency: if diary exists, return it
-    if let Some(existing) = find_existing_diary(&store, &date)? {
-        return Ok(DiaryGenerateResult {
-            date,
-            note_id: existing.note_id,
-            title: existing.title,
-            content: existing.content,
-            source_event_count: 0, // not re-counting
-            source_turn_count: 0,
-            source_note_count: 0,
-            regenerated: false,
-        });
-    }
+    let existing_id = find_existing_diary(&store, &date)?.map(|e| e.note_id);
 
-    generate_diary_inner(base_dir, db, client, user_id, &date, &config, None).await
+    generate_diary_inner(
+        base_dir,
+        db,
+        client,
+        user_id,
+        &date,
+        &config,
+        existing_id.as_deref(),
+    )
+    .await
 }
 
 /// Regenerate a diary for the given date, replacing any existing one.
@@ -418,8 +447,16 @@ pub async fn regenerate_diary(
     // Find existing diary note id for update
     let existing_id = find_existing_diary(&store, &date)?.map(|e| e.note_id);
 
-    generate_diary_inner(base_dir, db, client, user_id, &date, &config, existing_id.as_deref())
-        .await
+    generate_diary_inner(
+        base_dir,
+        db,
+        client,
+        user_id,
+        &date,
+        &config,
+        existing_id.as_deref(),
+    )
+    .await
 }
 
 /// Get a specific diary entry by date.
@@ -428,10 +465,7 @@ pub async fn regenerate_diary(
 /// enforced — the current NoteStore backend does not partition diary notes
 /// per user. When multi-user support is added, this function should filter
 /// by `user_id`.
-pub fn get_diary(
-    _user_id: &str,
-    date: String,
-) -> Result<Option<DiaryEntry>, AppError> {
+pub fn get_diary(_user_id: &str, date: String) -> Result<Option<DiaryEntry>, AppError> {
     validate_date(&date)?;
 
     let store = default_store()?;
@@ -444,10 +478,7 @@ pub fn get_diary(
 /// enforced — the current NoteStore backend does not partition diary notes
 /// per user. When multi-user support is added, this function should filter
 /// by `user_id`.
-pub fn get_diary_list(
-    _user_id: &str,
-    limit: Option<usize>,
-) -> Result<Vec<DiaryEntry>, AppError> {
+pub fn get_diary_list(_user_id: &str, limit: Option<usize>) -> Result<Vec<DiaryEntry>, AppError> {
     let store = default_store()?;
     list_diary_entries(&store, limit.unwrap_or(30))
 }
@@ -468,7 +499,8 @@ async fn generate_diary_inner(
     // Gather source data — convert local date to UTC range for correct DB comparison
     let (utc_start, utc_end) = local_date_to_utc_range(date);
     let events = db.query_events_by_date(user_id, &utc_start, &utc_end, MAX_SOURCE_EVENTS)?;
-    let turns = db.query_conversation_turns_by_date(user_id, &utc_start, &utc_end, MAX_SOURCE_TURNS)?;
+    let turns =
+        db.query_conversation_turns_by_date(user_id, &utc_start, &utc_end, MAX_SOURCE_TURNS)?;
     let core_memory = load_core_memory(base_dir, user_id, config)?;
     let store_for_notes = default_store()?;
     let user_notes = query_notes_by_date(&store_for_notes, date)?;
@@ -476,10 +508,10 @@ async fn generate_diary_inner(
     let source_event_count = events.len();
     let source_turn_count = turns.len();
     let source_note_count = user_notes.len();
-    let has_data = !events.is_empty() || !turns.is_empty() || !user_notes.is_empty();
+    let has_direct_sources = has_direct_diary_sources(&turns, &user_notes);
 
-    // Empty day: generate simple markdown without LLM (skip related-memory retrieval)
-    if !has_data {
+    // Empty day: derived events and long-term memory are not enough to write a diary.
+    if !has_direct_sources {
         let content = empty_day_diary(date);
         let store = default_store()?;
         let entry = save_diary_note(&store, date, &content, existing_note_id, is_regenerate)?;
@@ -488,25 +520,28 @@ async fn generate_diary_inner(
             note_id: entry.note_id,
             title: entry.title,
             content: entry.content,
-            source_event_count: 0,
-            source_turn_count: 0,
-            source_note_count: 0,
+            source_event_count,
+            source_turn_count,
+            source_note_count,
             regenerated: is_regenerate,
         });
     }
 
     // Retrieve related past memories for diary context
-    let related_memories =
-        super::diary_memory::retrieve_related_diary_memories(db, &super::diary_memory::DiaryMemoryQuery {
+    let related_memories = super::diary_memory::retrieve_related_diary_memories(
+        db,
+        &super::diary_memory::DiaryMemoryQuery {
             user_id,
             diary_date: date,
             day_events: &events,
             day_turns: &turns,
             day_notes: &user_notes,
             max_results: 5,
-        })?;
+        },
+    )?;
 
-    let related_memories_text = super::diary_memory::format_related_memories_for_prompt(&related_memories);
+    let related_memories_text =
+        super::diary_memory::format_related_memories_for_prompt(&related_memories);
 
     // Build LLM prompt
     let events_text = format_events_for_prompt(&events);
@@ -524,13 +559,19 @@ async fn generate_diary_inner(
         related_memories_text.as_deref(),
     );
 
-    let messages = vec![ChatMessage {
-        role: "user".to_string(),
-        content: prompt,
-    }];
+    let messages = vec![
+        ChatMessage {
+            role: "system".to_string(),
+            content: DIARY_ANTI_HALLUCINATION_RULES.to_string(),
+        },
+        ChatMessage {
+            role: "user".to_string(),
+            content: prompt,
+        },
+    ];
 
     // Call LLM (use main model for user-facing diary artifact)
-    let llm_output = call_llm(client, config, &messages, None, 0.7, 2000).await?;
+    let llm_output = call_llm(client, config, &messages, None, DIARY_TEMPERATURE, 2000).await?;
 
     // Clean up the output: ensure it starts with the heading
     let content = if llm_output.trim().starts_with(&format!("# {date}")) {
@@ -598,6 +639,37 @@ mod tests {
         let content = empty_day_diary("2026-05-30");
         assert!(content.starts_with("# 2026-05-30"));
         assert!(content.contains("没有足够的记录"));
+    }
+
+    #[test]
+    fn test_direct_diary_sources_require_nonempty_turn_summary_or_note() {
+        use super::super::types::ConversationTurn;
+
+        let no_turns: Vec<ConversationTurn> = vec![];
+        let no_notes: Vec<(String, String)> = vec![];
+        assert!(!has_direct_diary_sources(&no_turns, &no_notes));
+
+        let empty_turns = vec![ConversationTurn {
+            id: 1,
+            summary: "  ".to_string(),
+            emotions: vec![],
+            created_at: "2026-06-04T10:00:00Z".to_string(),
+        }];
+        assert!(!has_direct_diary_sources(&empty_turns, &no_notes));
+
+        let useful_turns = vec![ConversationTurn {
+            id: 2,
+            summary: "user said something concrete".to_string(),
+            emotions: vec![],
+            created_at: "2026-06-04T10:00:00Z".to_string(),
+        }];
+        assert!(has_direct_diary_sources(&useful_turns, &no_notes));
+
+        let blank_notes = vec![("note".to_string(), "   ".to_string())];
+        assert!(!has_direct_diary_sources(&no_turns, &blank_notes));
+
+        let useful_notes = vec![("note".to_string(), "one concrete note".to_string())];
+        assert!(has_direct_diary_sources(&no_turns, &useful_notes));
     }
 
     #[test]
@@ -680,6 +752,72 @@ mod tests {
     }
 
     #[test]
+    fn test_build_diary_prompt_requires_grounded_nonfiction_style() {
+        let prompt = build_diary_prompt(
+            "2026-05-30",
+            "1. 面试事件",
+            "1. 用户提到今天有点累",
+            "### 1. 随手记\n\n只写了几个关键词",
+            "",
+            true,
+            None,
+        );
+
+        assert!(prompt.contains("今天的对话摘要"));
+        assert!(prompt.contains("今天的笔记"));
+        assert!(prompt.contains("不得编造"));
+        assert!(prompt.contains("不要写成小说"));
+        assert!(prompt.contains("不要添加戏剧化场景"));
+        assert!(prompt.contains("优先准确"));
+    }
+
+    #[test]
+    fn test_build_diary_prompt_requires_natural_diary_voice() {
+        let prompt = build_diary_prompt(
+            "2026-06-03",
+            "1. 用户补考通过；2. 用户和女朋友吵架",
+            "1. 用户犹豫要不要主动去哄女朋友",
+            "### 1. 随手记\n\n补考成功过了，哈哈哈\n\n今天和女朋友吵架了",
+            "",
+            true,
+            Some("--- 可能相关的过往记忆 ---\n- [2026-05-31] 用户曾因补考焦虑\n---"),
+        );
+
+        assert!(prompt.contains("自然像本人写下来的日记"));
+        assert!(prompt.contains("不要写成资料汇总、复盘报告或事实核查"));
+        assert!(prompt.contains("不要在正文里写“笔记里”"));
+        assert!(prompt.contains("不要在正文里写“重要事件里”"));
+        assert!(prompt.contains("不要在正文里写“记忆里”"));
+        assert!(prompt.contains("不要把矛盾分析过程写出来"));
+        assert!(prompt.contains("静默采用今天的笔记和对话"));
+    }
+
+    #[test]
+    fn test_build_diary_prompt_contains_anti_hallucination_rules() {
+        let prompt = build_diary_prompt(
+            "2026-06-04",
+            "1. derived event",
+            "1. user said hello",
+            "",
+            "",
+            true,
+            Some("--- related memory ---\nold memory\n---"),
+        );
+
+        assert!(prompt.contains("ANTI-HALLUCINATION RULES"));
+        assert!(prompt.contains("same-day chat summaries or same-day user notes"));
+        assert!(prompt.contains("must not create new facts for today"));
+        assert!(prompt.contains("Do not infer a concrete event"));
+        assert!(prompt.contains("Do not invent causes"));
+        assert!(prompt.contains("write a sparse diary"));
+    }
+
+    #[test]
+    fn test_diary_generation_uses_low_temperature() {
+        assert!(DIARY_TEMPERATURE <= 0.2);
+    }
+
+    #[test]
     fn test_today_local_format() {
         let today = today_local();
         assert_eq!(today.len(), 10);
@@ -694,10 +832,23 @@ mod tests {
         assert!(start.ends_with('Z'), "start should end with Z: {start}");
         assert!(end.ends_with('Z'), "end should end with Z: {end}");
         // Start should be before end in string comparison
-        assert!(start < end, "utc_start should be before utc_end: {start} >= {end}");
+        assert!(
+            start < end,
+            "utc_start should be before utc_end: {start} >= {end}"
+        );
         // Both should have the expected ISO 8601 format
-        assert_eq!(start.len(), 20, "expected 20 chars, got {}: '{start}'", start.len());
-        assert_eq!(end.len(), 20, "expected 20 chars, got {}: '{end}'", end.len());
+        assert_eq!(
+            start.len(),
+            20,
+            "expected 20 chars, got {}: '{start}'",
+            start.len()
+        );
+        assert_eq!(
+            end.len(),
+            20,
+            "expected 20 chars, got {}: '{end}'",
+            end.len()
+        );
     }
 
     #[test]
@@ -705,16 +856,20 @@ mod tests {
         // For any local date, the UTC range should span ~24 hours
         let (start, end) = local_date_to_utc_range("2026-06-15");
         // Parse the timestamps to compute duration
-        let start_dt = chrono::NaiveDateTime::parse_from_str(
-            start.trim_end_matches('Z'), "%Y-%m-%dT%H:%M:%S"
-        ).unwrap();
-        let end_dt = chrono::NaiveDateTime::parse_from_str(
-            end.trim_end_matches('Z'), "%Y-%m-%dT%H:%M:%S"
-        ).unwrap();
+        let start_dt =
+            chrono::NaiveDateTime::parse_from_str(start.trim_end_matches('Z'), "%Y-%m-%dT%H:%M:%S")
+                .unwrap();
+        let end_dt =
+            chrono::NaiveDateTime::parse_from_str(end.trim_end_matches('Z'), "%Y-%m-%dT%H:%M:%S")
+                .unwrap();
         let duration = end_dt - start_dt;
         // Should be 23:59:59 (86399 seconds) — effectively 24h
-        assert_eq!(duration.num_seconds(), 86399,
-            "UTC range should span 23h59m59s, got {}s", duration.num_seconds());
+        assert_eq!(
+            duration.num_seconds(),
+            86399,
+            "UTC range should span 23h59m59s, got {}s",
+            duration.num_seconds()
+        );
     }
 
     #[test]
@@ -737,9 +892,15 @@ mod tests {
 
         // find_existing_diary should now return this entry
         let found = find_existing_diary(&store, date).unwrap();
-        assert!(found.is_some(), "find_existing_diary should find the saved diary");
+        assert!(
+            found.is_some(),
+            "find_existing_diary should find the saved diary"
+        );
         let found = found.unwrap();
-        assert_eq!(found.note_id, entry1.note_id, "should return the same note_id");
+        assert_eq!(
+            found.note_id, entry1.note_id,
+            "should return the same note_id"
+        );
         assert_eq!(found.date, date);
 
         // Clean up
@@ -766,10 +927,14 @@ mod tests {
         let entry2 = save_diary_note(&store, date, new_content, Some(&note_id), true).unwrap();
 
         // The note_id should stay the same (update, not create)
-        assert_eq!(entry2.note_id, note_id,
-            "regenerate should update existing note, not create a new one");
-        assert_eq!(entry2.content, new_content,
-            "content should be replaced with new content");
+        assert_eq!(
+            entry2.note_id, note_id,
+            "regenerate should update existing note, not create a new one"
+        );
+        assert_eq!(
+            entry2.content, new_content,
+            "content should be replaced with new content"
+        );
 
         // Reading the note directly should return the new content
         let read_back = store.read_note(&note_id).unwrap();
@@ -791,10 +956,15 @@ mod tests {
             None,
         );
         // The final instruction should contain the actual date, not the literal "{date}"
-        assert!(!prompt.contains("{date}"), "prompt should not contain literal {{date}}: {prompt}");
+        assert!(
+            !prompt.contains("{date}"),
+            "prompt should not contain literal {{date}}: {prompt}"
+        );
         let last_line = prompt.lines().last().unwrap();
-        assert!(last_line.contains("2026-05-30"),
-            "final instruction should contain formatted date, got: {last_line}");
+        assert!(
+            last_line.contains("2026-05-30"),
+            "final instruction should contain formatted date, got: {last_line}"
+        );
     }
 
     #[test]
@@ -831,30 +1001,24 @@ mod tests {
     #[test]
     fn test_build_diary_prompt_with_related_memories() {
         let related = "--- 可能相关的过往记忆 ---\n这些记忆可能与今天有关。\n- [2026-05-20] 用户参加了面试 (topic: career)\n---\n";
-        let prompt = build_diary_prompt(
-            "2026-05-30",
-            "1. 面试事件",
-            "",
-            "",
-            "",
-            true,
-            Some(related),
+        let prompt =
+            build_diary_prompt("2026-05-30", "1. 面试事件", "", "", "", true, Some(related));
+        assert!(
+            prompt.contains("可能相关的过往记忆"),
+            "should include related memories section"
         );
-        assert!(prompt.contains("可能相关的过往记忆"), "should include related memories section");
-        assert!(prompt.contains("[2026-05-20]"), "should include related memory date");
+        assert!(
+            prompt.contains("[2026-05-20]"),
+            "should include related memory date"
+        );
     }
 
     #[test]
     fn test_build_diary_prompt_without_related_memories() {
-        let prompt = build_diary_prompt(
-            "2026-05-30",
-            "1. 面试事件",
-            "",
-            "",
-            "",
-            true,
-            None,
+        let prompt = build_diary_prompt("2026-05-30", "1. 面试事件", "", "", "", true, None);
+        assert!(
+            !prompt.contains("可能相关的过往记忆"),
+            "should NOT include related memories section"
         );
-        assert!(!prompt.contains("可能相关的过往记忆"), "should NOT include related memories section");
     }
 }
