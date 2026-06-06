@@ -173,3 +173,66 @@ export interface DiaryGenerateResult {
   sourceNoteCount: number;
   regenerated: boolean;
 }
+
+export interface WeeklySourceCounts {
+  diaryCount: number;
+  eventCount: number;
+  turnCount: number;
+  noteCount: number;
+  observationCount: number;
+}
+
+export interface WeeklySummaryEntry {
+  isoYear: number;
+  isoWeek: number;
+  weekDisplayRange: string;
+  noteId: string;
+  title: string;
+  content: string;
+  sourceCounts: WeeklySourceCounts;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface WeeklySummaryGenerateResult {
+  isoYear: number;
+  isoWeek: number;
+  weekDisplayRange: string;
+  noteId: string;
+  title: string;
+  content: string;
+  sourceCounts: WeeklySourceCounts;
+  regenerated: boolean;
+}
+
+export interface LifeChapterSourceCounts {
+  diaryCount: number;
+  weeklySummaryCount: number;
+  eventCount: number;
+  turnCount: number;
+  noteCount: number;
+  topicCount: number;
+  projectCount: number;
+  growthLineCount: number;
+  observationCount: number;
+}
+
+export interface LifeChapterEntry {
+  noteId: string;
+  title: string;
+  startDate: string;
+  endDate: string;
+  content: string;
+  sourceCounts: LifeChapterSourceCounts;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface LifeChapterGenerateResult {
+  noteId: string;
+  title: string;
+  startDate: string;
+  endDate: string;
+  content: string;
+  sourceCounts: LifeChapterSourceCounts;
+}

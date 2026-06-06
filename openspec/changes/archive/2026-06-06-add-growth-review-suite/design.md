@@ -45,6 +45,18 @@ Weekly summaries and life chapters should be manually generated or regenerated f
 
 Alternative: generate summaries automatically in a background task. That adds lifecycle and error-state complexity before the generation quality is proven.
 
+### D5: Use ISO week identity with display ranges
+
+Weekly summaries should use ISO year/week as the stable identity for API requests, filenames, and regeneration lookup. A weekly summary may include a human-readable `week_display_range` such as `2026-06-02 ~ 2026-06-08` for UI display, but local calendar week numbers must not become a second key.
+
+Alternative: store both ISO week and local week number as competing metadata keys. That adds ambiguity without current product value because the app is single-user and local-first.
+
+### D6: Generate editable chapter titles
+
+Life chapter titles should be generated from the selected date range and source themes, then remain editable by the user. The title is not required input before generation. Stored chapter filenames should be decoupled from mutable titles, for example by using a date-prefixed stable filename plus a slug or short hash.
+
+Alternative: require the user to name a chapter before generation. That increases input cost at the moment the product should be helping the user reflect.
+
 ## Risks / Trade-offs
 
 **[Sparse source material]** -> The prompt and service result should surface source counts and allow short/empty summaries instead of filling gaps with plausible stories.
@@ -59,10 +71,7 @@ Alternative: generate summaries automatically in a background task. That adds li
 
 1. Leave existing diary notes and memory tables unchanged.
 2. Add new generated note categories/tags for weekly summaries and life chapters.
-3. Expose new Tauri commands and frontend wrappers without removing existing diary commands.
-4. Archive the stale `growth-companion-mvp2` change without syncing its old delta specs.
-
-## Open Questions
-
-- Should weekly summaries use ISO week numbers, local calendar week ranges, or both in the note metadata?
-- Should life chapters require a user-provided title or generate one from the date range and source material?
+3. Use ISO week identity for existing and new weekly summary notes, with display ranges as presentation metadata.
+4. Store life chapters under stable filenames that do not depend on the editable display title.
+5. Expose new Tauri commands and frontend wrappers without removing existing diary commands.
+6. Archive the stale `growth-companion-mvp2` change without syncing its old delta specs.

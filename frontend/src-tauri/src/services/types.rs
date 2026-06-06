@@ -348,6 +348,127 @@ pub struct DiaryGenerateResult {
     pub regenerated: bool,
 }
 
+// ─── Weekly Growth Summary ────────────────────────────────────────────────
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct WeeklySummaryRequest {
+    pub user_id: String,
+    pub iso_year: i32,
+    pub iso_week: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct WeeklySourceCounts {
+    pub diary_count: usize,
+    pub event_count: usize,
+    pub turn_count: usize,
+    pub note_count: usize,
+    pub observation_count: usize,
+}
+
+impl WeeklySourceCounts {
+    pub fn total(&self) -> usize {
+        self.diary_count
+            + self.event_count
+            + self.turn_count
+            + self.note_count
+            + self.observation_count
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct WeeklySummaryEntry {
+    pub iso_year: i32,
+    pub iso_week: u32,
+    pub week_display_range: String,
+    pub note_id: String,
+    pub title: String,
+    pub content: String,
+    pub source_counts: WeeklySourceCounts,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct WeeklySummaryGenerateResult {
+    pub iso_year: i32,
+    pub iso_week: u32,
+    pub week_display_range: String,
+    pub note_id: String,
+    pub title: String,
+    pub content: String,
+    pub source_counts: WeeklySourceCounts,
+    pub regenerated: bool,
+}
+
+// ─── Life Chapter ─────────────────────────────────────────────────────────
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct LifeChapterRequest {
+    pub user_id: String,
+    pub start_date: String,
+    pub end_date: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct LifeChapterSourceCounts {
+    pub diary_count: usize,
+    pub weekly_summary_count: usize,
+    pub event_count: usize,
+    pub turn_count: usize,
+    pub note_count: usize,
+    pub topic_count: usize,
+    pub project_count: usize,
+    pub growth_line_count: usize,
+    pub observation_count: usize,
+}
+
+impl LifeChapterSourceCounts {
+    pub fn total(&self) -> usize {
+        self.diary_count
+            + self.weekly_summary_count
+            + self.event_count
+            + self.turn_count
+            + self.note_count
+            + self.topic_count
+            + self.project_count
+            + self.growth_line_count
+            + self.observation_count
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct LifeChapterEntry {
+    pub note_id: String,
+    pub title: String,
+    pub start_date: String,
+    pub end_date: String,
+    pub content: String,
+    pub source_counts: LifeChapterSourceCounts,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct LifeChapterGenerateResult {
+    pub note_id: String,
+    pub title: String,
+    pub start_date: String,
+    pub end_date: String,
+    pub content: String,
+    pub source_counts: LifeChapterSourceCounts,
+}
+
 // ─── Default Functions ────────────────────────────────────────────────────
 
 pub fn default_strength() -> f64 {

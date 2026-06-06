@@ -495,6 +495,88 @@ async fn ai_regenerate_diary(
     services::diary::regenerate_diary(&base_dir, &db, &client, &user_id, date).await
 }
 
+// ─── Growth Review Commands ───────────────────────────────────────────────
+
+#[tauri::command]
+fn ai_get_weekly_summaries() -> Result<Vec<services::types::WeeklySummaryEntry>, AppError> {
+    services::weekly_summary::list_weekly_summaries(&default_store()?)
+}
+
+#[tauri::command]
+async fn ai_generate_weekly_summary(
+    app: AppHandle,
+    user_id: String,
+    iso_year: i32,
+    iso_week: u32,
+) -> Result<services::types::WeeklySummaryGenerateResult, AppError> {
+    let base_dir = default_base_dir()?;
+    let db = app.state::<services::database::DbState>();
+    let client = {
+        let llm_state = app.state::<Mutex<reqwest::Client>>();
+        let guard = llm_state
+            .lock()
+            .map_err(|e| AppError::new("state", format!("Failed to lock LLM client: {e}")))?;
+        guard.clone()
+    };
+
+    services::weekly_summary::generate_weekly_summary(
+        &base_dir, &db, &client, &user_id, iso_year, iso_week,
+    )
+    .await
+}
+
+#[tauri::command]
+async fn ai_regenerate_weekly_summary(
+    app: AppHandle,
+    user_id: String,
+    iso_year: i32,
+    iso_week: u32,
+) -> Result<services::types::WeeklySummaryGenerateResult, AppError> {
+    let base_dir = default_base_dir()?;
+    let db = app.state::<services::database::DbState>();
+    let client = {
+        let llm_state = app.state::<Mutex<reqwest::Client>>();
+        let guard = llm_state
+            .lock()
+            .map_err(|e| AppError::new("state", format!("Failed to lock LLM client: {e}")))?;
+        guard.clone()
+    };
+
+    services::weekly_summary::regenerate_weekly_summary(
+        &base_dir, &db, &client, &user_id, iso_year, iso_week,
+    )
+    .await
+}
+
+#[tauri::command]
+fn ai_get_life_chapters() -> Result<Vec<services::types::LifeChapterEntry>, AppError> {
+    services::life_chapter::list_life_chapters(&default_store()?)
+}
+
+#[tauri::command]
+async fn ai_generate_life_chapter(
+    app: AppHandle,
+    user_id: String,
+    start_date: String,
+    end_date: String,
+    title: Option<String>,
+) -> Result<services::types::LifeChapterGenerateResult, AppError> {
+    let base_dir = default_base_dir()?;
+    let db = app.state::<services::database::DbState>();
+    let client = {
+        let llm_state = app.state::<Mutex<reqwest::Client>>();
+        let guard = llm_state
+            .lock()
+            .map_err(|e| AppError::new("state", format!("Failed to lock LLM client: {e}")))?;
+        guard.clone()
+    };
+
+    services::life_chapter::generate_life_chapter(
+        &base_dir, &db, &client, &user_id, start_date, end_date, title,
+    )
+    .await
+}
+
 // ─── App Entry Point ──────────────────────────────────────────────────────
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -586,6 +668,11 @@ pub fn run() {
             ai_get_diary_list,
             ai_get_diary,
             ai_regenerate_diary,
+            ai_get_weekly_summaries,
+            ai_generate_weekly_summary,
+            ai_regenerate_weekly_summary,
+            ai_get_life_chapters,
+            ai_generate_life_chapter,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

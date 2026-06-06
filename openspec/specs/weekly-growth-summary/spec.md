@@ -1,4 +1,7 @@
-## ADDED Requirements
+## Purpose
+Provide grounded weekly growth summaries that turn local diary and memory records into a reviewable Markdown note while keeping ISO week identity stable.
+
+## Requirements
 
 ### Requirement: Weekly growth summary generation
 The system SHALL generate a weekly growth summary for a specified local calendar week using source material from that week.
@@ -21,6 +24,17 @@ The system SHALL store weekly summaries as Markdown notes in the current NoteSto
 #### Scenario: Weekly summary regenerated
 - **WHEN** the frontend requests regeneration for a week with an existing weekly summary note
 - **THEN** the system replaces the existing weekly summary content instead of creating a duplicate summary for the same week
+
+### Requirement: Weekly summary identity and display range
+The system SHALL use ISO year/week as the stable identity for weekly summaries and SHALL expose a human-readable date range for display.
+
+#### Scenario: Weekly summary has stable ISO identity
+- **WHEN** the system stores or regenerates a weekly summary
+- **THEN** the note identity, filename, and command parameters use ISO year/week rather than a local calendar week number
+
+#### Scenario: Weekly summary display range shown
+- **WHEN** the frontend lists or opens a weekly summary
+- **THEN** the response includes a `week_display_range` formatted from ISO dates for user-facing display
 
 ### Requirement: Weekly summary listing
 The system SHALL expose weekly summary entries through Tauri commands.
