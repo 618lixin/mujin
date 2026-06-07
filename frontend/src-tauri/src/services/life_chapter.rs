@@ -7,7 +7,8 @@ use super::llm::call_llm;
 use super::notes::{default_store, AppError, NoteStore, SaveNoteRequest};
 use super::types::{
     ChatMessage, ConversationTurn, Event, GrowthLine, LifeChapterEntry,
-    LifeChapterGenerateResult, LifeChapterSourceCounts, Observation, Project, Topic,
+    LifeChapterGenerateResult, LifeChapterSourceCounts, LifeChapterUpdateResult, Observation,
+    Project, Topic,
 };
 
 const LIFE_CHAPTER_CATEGORY: &str = "life-chapter";
@@ -358,6 +359,53 @@ pub fn list_life_chapters(store: &NoteStore) -> Result<Vec<LifeChapterEntry>, Ap
     }
     entries.sort_by_key(|entry| std::cmp::Reverse(entry.updated_at.clone()));
     Ok(entries)
+}
+
+pub fn update_life_chapter(
+    store: &NoteStore,
+    note_id: &str,
+    title: String,
+    content: String,
+) -> Result<LifeChapterUpdateResult, AppError> {
+    let existing = store.read_note(note_id)?;
+    if existing.category != LIFE_CHAPTER_CATEGORY {
+        return Err(AppError::new(
+            "lifeChapterNotFound",
+            format!("Life chapter {note_id} was not found"),
+        ));
+    }
+    let (start_date, end_date) = parse_chapter_range_from_content(&existing.content).ok_or_else(|| {
+        AppError::new(
+            "lifeChapterMetadataMissing",
+            format!("Life chapter {note_id} is missing date-range metadata"),
+        )
+    })?;
+    let range = LifeChapterRange::new(&start_date, &end_date)?;
+    let title = title.trim().to_string();
+    let title = if title.is_empty() {
+        existing.title
+    } else {
+        title
+    };
+    let normalized = normalize_chapter_heading(&title, &content);
+    let stored_content = with_range_metadata(&range, &normalized);
+    let note = store.update_note(
+        note_id,
+        SaveNoteRequest {
+            title: title.clone(),
+            content: stored_content,
+            category: LIFE_CHAPTER_CATEGORY.to_string(),
+        },
+    )?;
+
+    Ok(LifeChapterUpdateResult {
+        note_id: note.id,
+        title: note.title,
+        start_date,
+        end_date,
+        content: strip_range_metadata(&note.content).to_string(),
+        updated_at: note.updated_at.to_rfc3339(),
+    })
 }
 
 pub async fn generate_life_chapter(
@@ -809,5 +857,59 @@ mod tests {
         assert_eq!(listed[0].start_date, "2026-06-01");
         assert_eq!(listed[0].end_date, "2026-06-30");
         assert!(!listed[0].content.contains("end_date:"));
+    }
+
+    #[test]
+    fn update_life_chapter_preserves_note_id_and_date_metadata() {
+        let store = temp_store("update");
+        let range = LifeChapterRange::new("2026-06-01", "2026-06-30").unwrap();
+        let saved = save_life_chapter_note(
+            &store,
+            &range,
+            "Old title",
+            &with_range_metadata(&range, "# Old title\n\nold body"),
+            LifeChapterSourceCounts::default(),
+        )
+        .unwrap();
+
+        let updated = update_life_chapter(
+            &store,
+            &saved.note_id,
+            "New title".to_string(),
+            "# User heading\n\nnew body".to_string(),
+        )
+        .unwrap();
+        let stored = store.read_note(&saved.note_id).unwrap();
+
+        assert_eq!(updated.note_id, saved.note_id);
+        assert_eq!(updated.title, "New title");
+        assert_eq!(updated.start_date, "2026-06-01");
+        assert_eq!(updated.end_date, "2026-06-30");
+        assert_eq!(updated.content, "# New title\n\nnew body");
+        assert!(stored.content.contains("start_date: 2026-06-01"));
+        assert!(stored.content.contains("end_date: 2026-06-30"));
+        assert!(stored.content.contains("# New title"));
+    }
+
+    #[test]
+    fn update_life_chapter_rejects_non_chapter_note() {
+        let store = temp_store("update-non-chapter");
+        let note = store
+            .create_note(SaveNoteRequest {
+                title: "Plain note".to_string(),
+                content: "body".to_string(),
+                category: "diary".to_string(),
+            })
+            .unwrap();
+
+        let err = update_life_chapter(
+            &store,
+            &note.id,
+            "New title".to_string(),
+            "new body".to_string(),
+        )
+        .unwrap_err();
+
+        assert_eq!(err.code, "lifeChapterNotFound");
     }
 }

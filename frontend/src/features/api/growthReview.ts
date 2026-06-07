@@ -2,8 +2,10 @@ import { invoke } from "@tauri-apps/api/core";
 import type {
   LifeChapterEntry,
   LifeChapterGenerateResult,
+  LifeChapterUpdateResult,
   WeeklySummaryEntry,
   WeeklySummaryGenerateResult,
+  WeeklySummaryUpdateResult,
 } from "./types";
 import { DEFAULT_USER_ID } from "./types";
 
@@ -35,6 +37,18 @@ export function regenerateWeeklySummary(
   });
 }
 
+export function updateWeeklySummary(
+  isoYear: number,
+  isoWeek: number,
+  content: string,
+): Promise<WeeklySummaryUpdateResult> {
+  return invoke("ai_update_weekly_summary", {
+    isoYear,
+    isoWeek,
+    content,
+  });
+}
+
 export function getLifeChapters(): Promise<LifeChapterEntry[]> {
   return invoke("ai_get_life_chapters");
 }
@@ -50,5 +64,17 @@ export function generateLifeChapter(
     startDate,
     endDate,
     title: title ?? null,
+  });
+}
+
+export function updateLifeChapter(
+  noteId: string,
+  title: string,
+  content: string,
+): Promise<LifeChapterUpdateResult> {
+  return invoke("ai_update_life_chapter", {
+    noteId,
+    title,
+    content,
   });
 }

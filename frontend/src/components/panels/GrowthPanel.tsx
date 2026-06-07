@@ -11,6 +11,8 @@ import {
   getLifeChapters,
   getWeeklySummaries,
   regenerateWeeklySummary,
+  updateLifeChapter,
+  updateWeeklySummary,
 } from "../../features/api/growthReview";
 import { getTopics } from "../../features/api/memory";
 import {
@@ -85,6 +87,9 @@ export function GrowthPanel() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [editTitle, setEditTitle] = useState("");
+  const [editContent, setEditContent] = useState("");
 
   async function refreshAll() {
     setError(null);
@@ -112,8 +117,16 @@ export function GrowthPanel() {
     setTopics(topicList);
     setProjects(projectList);
     setGrowthLines(lineList);
-    setSelectedWeekly((current) => current ?? weeklyList[0] ?? null);
-    setSelectedChapter((current) => current ?? chapterList[0] ?? null);
+    setSelectedWeekly((current) =>
+      current
+        ? weeklyList.find((entry) => entry.noteId === current.noteId) ?? current
+        : weeklyList[0] ?? null,
+    );
+    setSelectedChapter((current) =>
+      current
+        ? chapterList.find((entry) => entry.noteId === current.noteId) ?? current
+        : chapterList[0] ?? null,
+    );
   }
 
   useEffect(() => {
@@ -156,12 +169,93 @@ export function GrowthPanel() {
     }
   }
 
+  useEffect(() => {
+    setEditing(false);
+    setEditTitle(tab === "chapter" ? selectedChapter?.title ?? "" : "");
+    setEditContent(
+      tab === "weekly"
+        ? selectedWeekly?.content ?? ""
+        : tab === "chapter"
+          ? selectedChapter?.content ?? ""
+          : "",
+    );
+  }, [tab, selectedWeekly?.noteId, selectedChapter?.noteId]);
+
   const detailContent =
     tab === "diary"
       ? selectedDiary?.content
       : tab === "weekly"
         ? selectedWeekly?.content
         : selectedChapter?.content;
+  const canEdit =
+    (tab === "weekly" && selectedWeekly !== null) ||
+    (tab === "chapter" && selectedChapter !== null);
+  const dirty =
+    tab === "weekly"
+      ? editContent !== (selectedWeekly?.content ?? "")
+      : tab === "chapter"
+        ? editTitle !== (selectedChapter?.title ?? "") ||
+          editContent !== (selectedChapter?.content ?? "")
+        : false;
+
+  function startEdit() {
+    if (!canEdit) return;
+    setError(null);
+    setEditTitle(tab === "chapter" ? selectedChapter?.title ?? "" : "");
+    setEditContent(
+      tab === "weekly" ? selectedWeekly?.content ?? "" : selectedChapter?.content ?? "",
+    );
+    setEditing(true);
+  }
+
+  function cancelEdit() {
+    setError(null);
+    setEditTitle(tab === "chapter" ? selectedChapter?.title ?? "" : "");
+    setEditContent(
+      tab === "weekly" ? selectedWeekly?.content ?? "" : selectedChapter?.content ?? "",
+    );
+    setEditing(false);
+  }
+
+  async function saveEdit() {
+    if (tab === "weekly" && selectedWeekly) {
+      await runAction("save-week", async () => {
+        const result = await updateWeeklySummary(
+          selectedWeekly.isoYear,
+          selectedWeekly.isoWeek,
+          editContent,
+        );
+        const updated: WeeklySummaryEntry = {
+          ...selectedWeekly,
+          ...result,
+          sourceCounts: selectedWeekly.sourceCounts,
+          createdAt: selectedWeekly.createdAt,
+        };
+        setSelectedWeekly(updated);
+        setWeeklySummaries((items) =>
+          items.map((item) => (item.noteId === updated.noteId ? updated : item)),
+        );
+        setEditing(false);
+      });
+      return;
+    }
+    if (tab === "chapter" && selectedChapter) {
+      await runAction("save-chapter", async () => {
+        const result = await updateLifeChapter(selectedChapter.noteId, editTitle, editContent);
+        const updated: LifeChapterEntry = {
+          ...selectedChapter,
+          ...result,
+          sourceCounts: selectedChapter.sourceCounts,
+          createdAt: selectedChapter.createdAt,
+        };
+        setSelectedChapter(updated);
+        setLifeChapters((items) =>
+          items.map((item) => (item.noteId === updated.noteId ? updated : item)),
+        );
+        setEditing(false);
+      });
+    }
+  }
 
   if (loading) {
     return (
@@ -365,6 +459,10 @@ export function GrowthPanel() {
                       : "选择或生成一项回顾"}
               </p>
             </div>
+            <div className="flex shrink-0 items-center gap-2">
+            {editing && dirty && (
+              <span className="text-[10px] text-ink-ghost">未保存</span>
+            )}
             {tab === "diary" && selectedDiary && (
               <button
                 onClick={() =>
@@ -383,7 +481,7 @@ export function GrowthPanel() {
                 重新生成
               </button>
             )}
-            {tab === "weekly" && selectedWeekly && (
+            {tab === "weekly" && selectedWeekly && !editing && (
               <button
                 onClick={() =>
                   runAction("regenerate-week", async () => {
@@ -400,9 +498,52 @@ export function GrowthPanel() {
                 重新生成
               </button>
             )}
+            {canEdit && !editing && (
+              <button
+                onClick={startEdit}
+                disabled={busy !== null}
+                className="rounded-md border border-paper-deep px-3 py-1.5 text-[12px] text-ink-faint hover:bg-paper-warm disabled:opacity-50"
+              >
+                编辑
+              </button>
+            )}
+            {editing && (
+              <>
+                <button
+                  onClick={cancelEdit}
+                  disabled={busy !== null}
+                  className="rounded-md border border-paper-deep px-3 py-1.5 text-[12px] text-ink-faint hover:bg-paper-warm disabled:opacity-50"
+                >
+                  取消
+                </button>
+                <button
+                  onClick={() => void saveEdit()}
+                  disabled={busy !== null || !dirty}
+                  className="rounded-md bg-bamboo px-3 py-1.5 text-[12px] text-cloud disabled:opacity-50"
+                >
+                  保存
+                </button>
+              </>
+            )}
+            </div>
           </div>
           <div className="h-[470px] overflow-y-auto rounded-md bg-paper/45 px-4 py-3">
-            {detailContent ? (
+            {editing ? (
+              <div className="space-y-3">
+                {tab === "chapter" && (
+                  <input
+                    value={editTitle}
+                    onChange={(event) => setEditTitle(event.target.value)}
+                    className="w-full rounded-md border border-paper-deep/40 bg-cloud px-3 py-2 text-[13px] text-ink-soft outline-none focus:border-bamboo/60"
+                  />
+                )}
+                <textarea
+                  value={editContent}
+                  onChange={(event) => setEditContent(event.target.value)}
+                  className="min-h-[410px] w-full resize-none rounded-md border border-paper-deep/40 bg-cloud px-3 py-3 font-mono text-[13px] leading-6 text-ink-soft outline-none focus:border-bamboo/60"
+                />
+              </div>
+            ) : detailContent ? (
               <MarkdownPreview content={detailContent} fontSize={14} />
             ) : (
               <div className="flex h-full items-center justify-center text-[12px] text-ink-ghost">

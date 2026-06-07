@@ -405,6 +405,18 @@ pub struct WeeklySummaryGenerateResult {
     pub regenerated: bool,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct WeeklySummaryUpdateResult {
+    pub iso_year: i32,
+    pub iso_week: u32,
+    pub week_display_range: String,
+    pub note_id: String,
+    pub title: String,
+    pub content: String,
+    pub updated_at: String,
+}
+
 // ─── Life Chapter ─────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -467,6 +479,17 @@ pub struct LifeChapterGenerateResult {
     pub end_date: String,
     pub content: String,
     pub source_counts: LifeChapterSourceCounts,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct LifeChapterUpdateResult {
+    pub note_id: String,
+    pub title: String,
+    pub start_date: String,
+    pub end_date: String,
+    pub content: String,
+    pub updated_at: String,
 }
 
 // ─── Default Functions ────────────────────────────────────────────────────

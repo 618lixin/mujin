@@ -6,6 +6,8 @@ import {
   getLifeChapters,
   getWeeklySummaries,
   regenerateWeeklySummary,
+  updateLifeChapter,
+  updateWeeklySummary,
 } from "./growthReview";
 
 vi.mock("@tauri-apps/api/core", () => ({
@@ -49,6 +51,18 @@ describe("growth review api", () => {
     });
   });
 
+  test("updateWeeklySummary invokes ai_update_weekly_summary", async () => {
+    vi.mocked(invoke).mockResolvedValue({ noteId: "n1" });
+
+    await updateWeeklySummary(2026, 23, "# edited");
+
+    expect(invoke).toHaveBeenCalledWith("ai_update_weekly_summary", {
+      isoYear: 2026,
+      isoWeek: 23,
+      content: "# edited",
+    });
+  });
+
   test("getLifeChapters invokes ai_get_life_chapters", async () => {
     vi.mocked(invoke).mockResolvedValue([]);
 
@@ -80,6 +94,18 @@ describe("growth review api", () => {
       startDate: "2026-06-01",
       endDate: "2026-06-30",
       title: "June Chapter",
+    });
+  });
+
+  test("updateLifeChapter invokes ai_update_life_chapter", async () => {
+    vi.mocked(invoke).mockResolvedValue({ noteId: "n1" });
+
+    await updateLifeChapter("n1", "Edited title", "# edited");
+
+    expect(invoke).toHaveBeenCalledWith("ai_update_life_chapter", {
+      noteId: "n1",
+      title: "Edited title",
+      content: "# edited",
     });
   });
 });

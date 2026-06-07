@@ -549,6 +549,20 @@ async fn ai_regenerate_weekly_summary(
 }
 
 #[tauri::command]
+fn ai_update_weekly_summary(
+    iso_year: i32,
+    iso_week: u32,
+    content: String,
+) -> Result<services::types::WeeklySummaryUpdateResult, AppError> {
+    services::weekly_summary::update_weekly_summary(
+        &default_store()?,
+        iso_year,
+        iso_week,
+        content,
+    )
+}
+
+#[tauri::command]
 fn ai_get_life_chapters() -> Result<Vec<services::types::LifeChapterEntry>, AppError> {
     services::life_chapter::list_life_chapters(&default_store()?)
 }
@@ -575,6 +589,15 @@ async fn ai_generate_life_chapter(
         &base_dir, &db, &client, &user_id, start_date, end_date, title,
     )
     .await
+}
+
+#[tauri::command]
+fn ai_update_life_chapter(
+    note_id: String,
+    title: String,
+    content: String,
+) -> Result<services::types::LifeChapterUpdateResult, AppError> {
+    services::life_chapter::update_life_chapter(&default_store()?, &note_id, title, content)
 }
 
 // ─── App Entry Point ──────────────────────────────────────────────────────
@@ -671,8 +694,10 @@ pub fn run() {
             ai_get_weekly_summaries,
             ai_generate_weekly_summary,
             ai_regenerate_weekly_summary,
+            ai_update_weekly_summary,
             ai_get_life_chapters,
             ai_generate_life_chapter,
+            ai_update_life_chapter,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

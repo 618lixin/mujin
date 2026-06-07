@@ -7,7 +7,7 @@ use super::llm::call_llm;
 use super::notes::{default_store, AppError, NoteStore, SaveNoteRequest};
 use super::types::{
     ChatMessage, ConversationTurn, Event, Observation, WeeklySourceCounts, WeeklySummaryEntry,
-    WeeklySummaryGenerateResult,
+    WeeklySummaryGenerateResult, WeeklySummaryUpdateResult,
 };
 
 const WEEKLY_SUMMARY_CATEGORY: &str = "weekly-growth-summary";
@@ -360,6 +360,45 @@ pub fn list_weekly_summaries(store: &NoteStore) -> Result<Vec<WeeklySummaryEntry
     Ok(entries)
 }
 
+pub fn update_weekly_summary(
+    store: &NoteStore,
+    iso_year: i32,
+    iso_week: u32,
+    content: String,
+) -> Result<WeeklySummaryUpdateResult, AppError> {
+    let identity = WeeklySummaryIdentity::new(iso_year, iso_week)?;
+    let title = identity.note_title();
+    let existing = store
+        .list_notes()?
+        .into_iter()
+        .find(|note| note.category == WEEKLY_SUMMARY_CATEGORY && note.title == title)
+        .ok_or_else(|| {
+            AppError::new(
+                "weeklySummaryNotFound",
+                format!("Weekly summary {title} was not found"),
+            )
+        })?;
+
+    let note = store.update_note(
+        &existing.id,
+        SaveNoteRequest {
+            title: title.clone(),
+            content,
+            category: WEEKLY_SUMMARY_CATEGORY.to_string(),
+        },
+    )?;
+
+    Ok(WeeklySummaryUpdateResult {
+        iso_year: identity.year,
+        iso_week: identity.week,
+        week_display_range: identity.week_display_range(),
+        note_id: note.id,
+        title,
+        content: note.content,
+        updated_at: note.updated_at.to_rfc3339(),
+    })
+}
+
 pub async fn generate_weekly_summary(
     base_dir: &Path,
     db: &super::database::DbState,
@@ -654,5 +693,46 @@ mod tests {
         assert_eq!(entries.len(), 2);
         assert_eq!(entries[0].iso_week, 23);
         assert_eq!(entries[1].iso_week, 22);
+    }
+
+    #[test]
+    fn update_weekly_summary_preserves_iso_identity_and_note_id() {
+        let store = temp_store("update");
+        let identity = WeeklySummaryIdentity::new(2026, 23).unwrap();
+        let saved = save_weekly_summary_note(
+            &store,
+            &identity,
+            "# week-2026-W23\n\nold body",
+            WeeklySourceCounts::default(),
+            false,
+        )
+        .unwrap();
+
+        let updated = update_weekly_summary(
+            &store,
+            2026,
+            23,
+            "# week-2026-W23\n\nuser edited body".to_string(),
+        )
+        .unwrap();
+
+        assert_eq!(updated.note_id, saved.note_id);
+        assert_eq!(updated.title, "week-2026-W23");
+        assert_eq!(updated.iso_year, 2026);
+        assert_eq!(updated.iso_week, 23);
+        assert_eq!(updated.content, "# week-2026-W23\n\nuser edited body");
+        assert_eq!(store.list_notes().unwrap().len(), 1);
+        assert_eq!(
+            store.read_note(&saved.note_id).unwrap().title,
+            "week-2026-W23"
+        );
+    }
+
+    #[test]
+    fn update_weekly_summary_rejects_missing_week() {
+        let store = temp_store("update-missing");
+        let err = update_weekly_summary(&store, 2026, 23, "edited".to_string()).unwrap_err();
+
+        assert_eq!(err.code, "weeklySummaryNotFound");
     }
 }

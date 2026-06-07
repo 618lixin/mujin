@@ -205,6 +205,16 @@ export interface WeeklySummaryGenerateResult {
   regenerated: boolean;
 }
 
+export interface WeeklySummaryUpdateResult {
+  isoYear: number;
+  isoWeek: number;
+  weekDisplayRange: string;
+  noteId: string;
+  title: string;
+  content: string;
+  updatedAt: string;
+}
+
 export interface LifeChapterSourceCounts {
   diaryCount: number;
   weeklySummaryCount: number;
@@ -235,4 +245,13 @@ export interface LifeChapterGenerateResult {
   endDate: string;
   content: string;
   sourceCounts: LifeChapterSourceCounts;
+}
+
+export interface LifeChapterUpdateResult {
+  noteId: string;
+  title: string;
+  startDate: string;
+  endDate: string;
+  content: string;
+  updatedAt: string;
 }
