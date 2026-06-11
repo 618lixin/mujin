@@ -1,8 +1,8 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Capability for Growth Companion windows",
-  "windows": ["main", "notepad-*", "tile-*"],
+  "description": "Capability for 槿年 windows",
+  "windows": ["main", "diary-*", "pinboard-*"],
   "permissions": [
     "core:default",
     "core:window:allow-close",

@@ -1,3 +1,3 @@
-export function shouldSaveBeforeSwitchingToTile(autoSave: boolean): boolean {
+export function shouldSaveBeforeSwitchingToPinboard(autoSave: boolean): boolean {
   return autoSave;
 }

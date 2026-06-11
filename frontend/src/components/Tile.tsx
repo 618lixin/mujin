@@ -135,7 +135,7 @@ export function Tile({
             className="font-body text-center py-6"
             style={{ color: emptyColor, fontSize: `${fontSize}px` }}
           >
-            {t("tile.empty", { defaultValue: "空" })}
+            {t("pinboard.empty", { defaultValue: "空" })}
           </div>
         )}
       </div>

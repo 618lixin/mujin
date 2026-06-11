@@ -208,7 +208,7 @@ pub fn default_store() -> Result<NoteStore, AppError> {
 }
 
 pub fn default_base_dir() -> Result<PathBuf, AppError> {
-    if let Ok(path) = env::var("GROWTH_COMPANION_DATA_DIR") {
+    if let Ok(path) = env::var("PERSONA_DIARY_DATA_DIR") {
         let trimmed = path.trim();
         if !trimmed.is_empty() {
             return Ok(PathBuf::from(trimmed));
@@ -220,13 +220,13 @@ pub fn default_base_dir() -> Result<PathBuf, AppError> {
         return Ok(PathBuf::from(home)
             .join("Library")
             .join("Application Support")
-            .join("Growth Companion"));
+            .join("槿年"));
     }
 
     if let Ok(user_profile) = env::var("USERPROFILE") {
         return Ok(PathBuf::from(user_profile)
             .join("Documents")
-            .join("Growth Companion"));
+            .join("槿年"));
     }
 
     Ok(env::current_dir()?.join("data"))
@@ -329,12 +329,20 @@ impl NoteStore {
         }
 
         let mut config: AppConfig = serde_json::from_str(&fs::read_to_string(&path)?)?;
+        let mut should_write_config = false;
+        if config.locale != default_locale() {
+            config.locale = default_locale();
+            should_write_config = true;
+        }
         if is_safe_notes_dir(Path::new(&config.notes_dir)).is_err() {
             config.notes_dir = self.default_config().notes_dir;
-            write_json_atomic(&path, &config)?;
+            should_write_config = true;
         }
         fs::create_dir_all(&config.notes_dir)?;
         if self.migrate_macos_shortcut_default(&mut config)? {
+            should_write_config = true;
+        }
+        if should_write_config {
             write_json_atomic(&path, &config)?;
         }
         Ok(config)
@@ -342,6 +350,7 @@ impl NoteStore {
 
     pub fn save_config(&self, mut config: AppConfig) -> Result<AppConfig, AppError> {
         self.ensure_base_dir()?;
+        config.locale = default_locale();
         config.notes_dir = ensure_notes_suffix(&config.notes_dir);
         config.tab_indent_size = config.tab_indent_size.clamp(1, 8);
         is_safe_notes_dir(Path::new(&config.notes_dir))?;
@@ -1064,9 +1073,9 @@ mod tests {
     use std::{fs, path::PathBuf};
 
     fn test_root(name: &str) -> PathBuf {
-        let base = std::env::var_os("GROWTH_COMPANION_TEST_TEMP_DIR")
+        let base = std::env::var_os("PERSONA_DIARY_TEST_TEMP_DIR")
             .map(PathBuf::from)
-            .unwrap_or_else(|| std::env::temp_dir().join("growth-companion-rust-tests"));
+            .unwrap_or_else(|| std::env::temp_dir().join("persona-diary-rust-tests"));
         let root = base.join(name);
         if root.exists() {
             fs::remove_dir_all(&root).expect("remove stale test root");
@@ -1212,7 +1221,15 @@ mod tests {
         store.save_config(saved.clone()).expect("save config");
 
         let loaded = store.load_config().expect("reload config");
-        assert_eq!(loaded, saved);
+        assert_ne!(saved.locale, "zh-CN");
+        assert_eq!(loaded.locale, "zh-CN");
+        assert_eq!(
+            loaded,
+            AppConfig {
+                locale: "zh-CN".into(),
+                ..saved
+            }
+        );
         assert!(custom_notes_dir.exists());
     }
 

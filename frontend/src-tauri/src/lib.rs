@@ -219,17 +219,17 @@ fn global_shortcut_check(
 }
 
 #[tauri::command]
-async fn open_notepad_window(
+async fn open_diary_window(
     app: AppHandle,
     note_id: Option<String>,
     bounds: Option<desktop::WindowBounds>,
 ) -> Result<String, AppError> {
-    desktop::open_notepad_window(app, note_id, bounds).await
+    desktop::open_diary_window(app, note_id, bounds).await
 }
 
 #[tauri::command]
-async fn recycle_notepad_window(app: AppHandle, label: String) -> Result<(), AppError> {
-    desktop::recycle_notepad_window(&app, &label)
+async fn recycle_diary_window(app: AppHandle, label: String) -> Result<(), AppError> {
+    desktop::recycle_diary_window(&app, &label)
 }
 
 #[tauri::command]
@@ -554,12 +554,7 @@ fn ai_update_weekly_summary(
     iso_week: u32,
     content: String,
 ) -> Result<services::types::WeeklySummaryUpdateResult, AppError> {
-    services::weekly_summary::update_weekly_summary(
-        &default_store()?,
-        iso_year,
-        iso_week,
-        content,
-    )
+    services::weekly_summary::update_weekly_summary(&default_store()?, iso_year, iso_week, content)
 }
 
 #[tauri::command]
@@ -657,8 +652,8 @@ pub fn run() {
             copy_background_image,
             config_save,
             global_shortcut_check,
-            open_notepad_window,
-            recycle_notepad_window,
+            open_diary_window,
+            recycle_diary_window,
             open_tile_window,
             toggle_tile_window,
             open_note_in_editor,

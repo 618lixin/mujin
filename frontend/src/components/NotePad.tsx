@@ -16,7 +16,7 @@ import {
   animateCurrentWindowBounds,
   closeCurrentWindow,
   getCurrentWindowBounds,
-  recycleCurrentNotepad,
+  recycleCurrentDiary,
   setCurrentWindowAlwaysOnTop,
   showCurrentWindow,
   startCurrentWindowDrag,
@@ -32,7 +32,7 @@ import {
   resolveTileColor,
 } from "../features/settings/tileColor";
 import type { TileColorMode } from "../features/settings/types";
-import { shouldSaveBeforeSwitchingToTile } from "../features/windows/noteSurfaceSavePolicy";
+import { shouldSaveBeforeSwitchingToPinboard } from "../features/windows/noteSurfaceSavePolicy";
 import {
   NOTE_SURFACE_ACTION_EVENT,
   surfaceActionFromEvent,
@@ -44,8 +44,8 @@ import {
 } from "../features/windows/surfaceMode";
 import type { NoteSurfaceMode } from "../features/windows/surfaceMode";
 import {
-  emitTileWindowUnpinned,
-  tileSurfaceModeUnpinNoteId,
+  emitPinboardWindowUnpinned,
+  pinboardSurfaceModeUnpinNoteId,
 } from "../features/windows/tileWindowEvents";
 import { Tile } from "./Tile";
 
@@ -141,20 +141,20 @@ export function NotePad({
   const hasEnteredOnce = useRef(false);
   const statusLabel = useMemo<Record<NotePadStatus, string>>(
     () => ({
-      empty: t("notepad.status.empty", { defaultValue: "空" }),
-      opened: t("notepad.status.opened", { defaultValue: "已打开" }),
-      saved: t("notepad.status.saved", { defaultValue: "已保存" }),
-      dirty: t("notepad.status.unsaved", { defaultValue: "未保存" }),
-      saveFailed: t("notepad.status.saveFailed", { defaultValue: "保存失败" }),
-      copied: t("notepad.status.copied", { defaultValue: "已复制" }),
+      empty: t("diary.status.empty", { defaultValue: "空" }),
+      opened: t("diary.status.opened", { defaultValue: "已打开" }),
+      saved: t("diary.status.saved", { defaultValue: "已保存" }),
+      dirty: t("diary.status.unsaved", { defaultValue: "未保存" }),
+      saveFailed: t("diary.status.saveFailed", { defaultValue: "保存失败" }),
+      copied: t("diary.status.copied", { defaultValue: "已复制" }),
     }),
     [t],
   );
   const tabLabels = useMemo(
     () => ({
-      new: t("notepad.tab.new", { defaultValue: "新建" }),
-      edit: t("notepad.tab.edit", { defaultValue: "编辑" }),
-      open: t("notepad.tab.open", { defaultValue: "打开" }),
+      new: t("diary.tab.new", { defaultValue: "新建" }),
+      edit: t("diary.tab.edit", { defaultValue: "编辑" }),
+      open: t("diary.tab.open", { defaultValue: "打开" }),
     }),
     [t],
   );
@@ -272,7 +272,7 @@ export function NotePad({
       // not in Tauri environment (tests)
     }
 
-    const unlisten = listen<string>("notepad:activate", (event) => {
+    const unlisten = listen<string>("diary:activate", (event) => {
       if (event.payload !== myLabel) return;
 
       isStandby.current = false;
@@ -339,14 +339,14 @@ export function NotePad({
 
   const switchSurfaceMode = useCallback(
     async (nextMode: NoteSurfaceMode) => {
-      const unpinnedNoteId = tileSurfaceModeUnpinNoteId(surfaceMode, nextMode, tileNoteId);
+      const unpinnedNoteId = pinboardSurfaceModeUnpinNoteId(surfaceMode, nextMode, tileNoteId);
       setSurfaceMode(nextMode);
       if (unpinnedNoteId) {
-        void emitTileWindowUnpinned(unpinnedNoteId).catch(() => undefined);
+        void emitPinboardWindowUnpinned(unpinnedNoteId).catch(() => undefined);
       }
 
       try {
-        if (nextMode === "tile") {
+        if (nextMode === "pinboard") {
           await setCurrentWindowAlwaysOnTop(true);
         }
 
@@ -373,7 +373,7 @@ export function NotePad({
   }, [switchSurfaceMode]);
 
   useEffect(() => {
-    if (surfaceMode !== "tile") return;
+    if (surfaceMode !== "pinboard") return;
     void setCurrentWindowAlwaysOnTop(true).catch(() => undefined);
   }, [surfaceMode]);
 
@@ -416,11 +416,11 @@ export function NotePad({
     setErrorMessage(null);
     setAiExtractStatus(null);
     try {
-      if (shouldSaveBeforeSwitchingToTile(noteSurfaceAutoSave)) {
+      if (shouldSaveBeforeSwitchingToPinboard(noteSurfaceAutoSave)) {
         const note = await saveNote();
         await extractSavedNote(note);
       }
-      await switchSurfaceMode("tile");
+      await switchSurfaceMode("pinboard");
     } catch (error) {
       setErrorMessage(getErrorMessage(error));
     }
@@ -428,7 +428,7 @@ export function NotePad({
 
   const handleClose = useCallback(() => {
     setIsExiting(true);
-    const closeSurface = surfaceMode === "tile" ? closeCurrentWindow : recycleCurrentNotepad;
+    const closeSurface = surfaceMode === "pinboard" ? closeCurrentWindow : recycleCurrentDiary;
     void closeSurface().catch((error) => {
       setIsExiting(false);
       setErrorMessage(getErrorMessage(error));
@@ -440,7 +440,7 @@ export function NotePad({
     try {
       const clipboard = navigator.clipboard;
       if (!clipboard?.writeText) {
-        throw new Error(t("notepad.error.copyUnsupported", { defaultValue: "当前环境不支持复制" }));
+        throw new Error(t("diary.error.copyUnsupported", { defaultValue: "当前环境不支持复制" }));
       }
       await clipboard.writeText(content);
       setStatus("copied");
@@ -507,7 +507,7 @@ export function NotePad({
     setErrorMessage(null);
   };
 
-  const isTile = surfaceMode === "tile";
+  const isTile = surfaceMode === "pinboard";
   const tileTitle = title.trim();
   const enterClass = hasEnteredOnce.current ? "" : "animate-window-enter";
   const surfaceWrapperClassName = `w-full h-screen flex flex-col bg-transparent p-0 ${isExiting ? "animate-window-exit" : enterClass}`;
@@ -526,7 +526,7 @@ export function NotePad({
           width="100%"
           className="h-full cursor-default"
           data-surface-mode={surfaceMode}
-          data-context-menu="tile"
+          data-context-menu="pinboard"
           data-note-id={tileNoteId}
           onMouseDown={handleDrag}
         >
@@ -592,7 +592,7 @@ export function NotePad({
                 <button
                   onClick={() => void handlePin()}
                   className="group w-7 h-7 flex items-center justify-center rounded-lg transition-all duration-200 cursor-pointer text-ink-ghost hover:text-ink-faint hover:bg-paper-warm"
-                  title={t("notepad.tooltip.pinToTile", { defaultValue: "转为磁贴" })}
+                  title={t("diary.tooltip.pinToPinboard", { defaultValue: "转为磁贴" })}
                 >
                   <svg
                     width="14"
@@ -612,7 +612,7 @@ export function NotePad({
                 <button
                   onClick={() => void handleClose()}
                   className="group w-7 h-7 flex items-center justify-center rounded-lg text-ink-ghost hover:bg-danger-bg hover:text-red-400 transition-all duration-200 cursor-pointer"
-                  title={t("notepad.tooltip.close", { defaultValue: "关闭" })}
+                  title={t("diary.tooltip.close", { defaultValue: "关闭" })}
                 >
                   <svg
                     width="13"
@@ -650,7 +650,7 @@ export function NotePad({
                       contentRef.current?.focus();
                     }
                   }}
-                  placeholder={t("notepad.placeholder.title", { defaultValue: "标题（可选）" })}
+                  placeholder={t("diary.placeholder.title", { defaultValue: "标题（可选）" })}
                   className="w-full font-display font-medium text-ink placeholder:text-ink-ghost/60 mb-2 tracking-wide shrink-0"
                   style={{ fontSize: `${surfaceFontSize}px` }}
                 />
@@ -675,7 +675,7 @@ export function NotePad({
                       }
                     }
                   }}
-                  placeholder={t("notepad.placeholder.content", { defaultValue: "写点什么……" })}
+                  placeholder={t("diary.placeholder.content", { defaultValue: "写点什么……" })}
                   className="w-full flex-1 min-h-0 pb-2 leading-relaxed text-ink-soft font-body placeholder:text-ink-ghost/50"
                   style={{ fontSize: `${surfaceFontSize}px`, tabSize: `var(--tab-indent-size, 2)` }}
                 />
@@ -691,7 +691,7 @@ export function NotePad({
                       onClick={resetDraft}
                       className="px-4 py-1.5 text-[12px] text-ink-faint hover:text-ink-soft rounded-lg hover:bg-paper-warm transition-all duration-200 cursor-pointer"
                     >
-                      {t("notepad.button.clear", { defaultValue: "清空" })}
+                      {t("diary.button.clear", { defaultValue: "清空" })}
                     </button>
                     <button
                       onClick={() => void handleSave()}
@@ -724,7 +724,7 @@ export function NotePad({
                               void openNoteInEditor(note.id);
                             }}
                             className="w-6 h-6 flex items-center justify-center rounded-md text-ink-ghost hover:text-bamboo hover:bg-bamboo-mist/50 transition-all duration-200 opacity-0 group-hover:opacity-100 cursor-pointer"
-                            title={t("notepad.tooltip.openInEditor", {
+                            title={t("diary.tooltip.openInEditor", {
                               defaultValue: "在编辑器中打开",
                             })}
                           >
@@ -758,7 +758,7 @@ export function NotePad({
                   ))}
                   {notes.length === 0 && (
                     <div className="px-4 py-8 text-center text-[12px] text-ink-ghost">
-                      {t("notepad.emptyState", { defaultValue: "还没有可打开的笔记" })}
+                      {t("diary.emptyState", { defaultValue: "还没有可打开的笔记" })}
                     </div>
                   )}
                 </div>

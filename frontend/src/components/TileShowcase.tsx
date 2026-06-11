@@ -5,5 +5,5 @@ interface TileShowcaseProps {
 }
 
 export function TileShowcase({ noteId }: TileShowcaseProps) {
-  return <NotePad initialNoteId={noteId} initialSurfaceMode="tile" />;
+  return <NotePad initialNoteId={noteId} initialSurfaceMode="pinboard" />;
 }

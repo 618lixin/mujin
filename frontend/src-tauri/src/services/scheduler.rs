@@ -179,7 +179,7 @@ async fn generate_proactive_message(
     };
 
     let prompt = format!(
-        r#"你是 Growth Companion，一个自然的 AI 朋友。
+        r#"你是槿年，一个自然的 AI 朋友。
 你已经有一段时间没有和用户说话了。
 
 上次对话距今：{idle_desc}

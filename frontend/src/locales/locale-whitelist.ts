@@ -1,4 +1,4 @@
-export const SUPPORTED_LOCALES = ["zh-CN", "en-US", "zh-HK"] as const;
+export const SUPPORTED_LOCALES = ["zh-CN"] as const;
 
 export type SupportedLocale = (typeof SUPPORTED_LOCALES)[number];
 
@@ -7,16 +7,10 @@ export const DEFAULT_LOCALE: SupportedLocale = "zh-CN";
 const SUPPORTED_LOCALE_SET = new Set<string>(SUPPORTED_LOCALES);
 
 const LOCALE_ALIASES: Record<string, SupportedLocale> = {
-  en: "en-US",
-  "en-us": "en-US",
   zh: "zh-CN",
   "zh-cn": "zh-CN",
   "zh-hans": "zh-CN",
   "zh-sg": "zh-CN",
-  "zh-hant": "zh-HK",
-  "zh-hk": "zh-HK",
-  "zh-mo": "zh-HK",
-  "zh-tw": "zh-HK",
 };
 
 function canonicalizeLocale(locale: string): string {
@@ -42,16 +36,7 @@ export function normalizeLocale(locale?: string | null): SupportedLocale | null 
     return canonical as SupportedLocale;
   }
 
-  const segments = canonical.toLowerCase().split("-");
-  for (let length = segments.length; length > 0; length -= 1) {
-    const candidate = segments.slice(0, length).join("-");
-    const normalized = LOCALE_ALIASES[candidate];
-    if (normalized) {
-      return normalized;
-    }
-  }
-
-  return null;
+  return LOCALE_ALIASES[canonical.toLowerCase()] ?? null;
 }
 
 export function resolveAppLocale(

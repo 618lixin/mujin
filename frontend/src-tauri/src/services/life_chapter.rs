@@ -6,9 +6,8 @@ use super::config::{load_ai_config, AiConfig};
 use super::llm::call_llm;
 use super::notes::{default_store, AppError, NoteStore, SaveNoteRequest};
 use super::types::{
-    ChatMessage, ConversationTurn, Event, GrowthLine, LifeChapterEntry,
-    LifeChapterGenerateResult, LifeChapterSourceCounts, LifeChapterUpdateResult, Observation,
-    Project, Topic,
+    ChatMessage, ConversationTurn, Event, GrowthLine, LifeChapterEntry, LifeChapterGenerateResult,
+    LifeChapterSourceCounts, LifeChapterUpdateResult, Observation, Project, Topic,
 };
 
 const LIFE_CHAPTER_CATEGORY: &str = "life-chapter";
@@ -96,7 +95,8 @@ pub struct LifeChapterSources {
 
 impl LifeChapterSources {
     pub fn filter_to_range(&mut self, range: &LifeChapterRange) {
-        self.topics.retain(|topic| topic_overlaps_range(topic, range));
+        self.topics
+            .retain(|topic| topic_overlaps_range(topic, range));
         self.projects
             .retain(|project| project_overlaps_range(project, range));
         self.growth_lines = self
@@ -116,7 +116,11 @@ impl LifeChapterSources {
     }
 
     pub fn refresh_counts(&mut self) {
-        let diary_count = self.notes.iter().filter(|note| note.category == "diary").count();
+        let diary_count = self
+            .notes
+            .iter()
+            .filter(|note| note.category == "diary")
+            .count();
         let weekly_summary_count = self
             .notes
             .iter()
@@ -162,7 +166,10 @@ pub fn build_sparse_life_chapter(
     }
 }
 
-pub fn limit_chapter_sources(mut sources: LifeChapterSources, max_each: usize) -> LifeChapterSources {
+pub fn limit_chapter_sources(
+    mut sources: LifeChapterSources,
+    max_each: usize,
+) -> LifeChapterSources {
     sources.events.truncate(max_each);
     sources.turns.truncate(max_each);
     sources.observations.truncate(max_each);
@@ -176,7 +183,12 @@ pub fn limit_chapter_sources(mut sources: LifeChapterSources, max_each: usize) -
 
 pub fn generate_chapter_title(range: &LifeChapterRange, sources: &LifeChapterSources) -> String {
     let time_label = if range.start_date.year() == range.end_date.year() {
-        format!("{} {}-{}", range.start_date.year(), range.start_date.month(), range.end_date.month())
+        format!(
+            "{} {}-{}",
+            range.start_date.year(),
+            range.start_date.month(),
+            range.end_date.month()
+        )
     } else {
         format!("{} to {}", range.start_date, range.end_date)
     };
@@ -245,17 +257,19 @@ pub fn build_life_chapter_prompt(range: &LifeChapterRange, sources: &LifeChapter
     if !sources.events.is_empty() {
         sections.push(format_items(
             "事件记忆",
-            sources.events.iter().map(|event| {
-                format!("{} ({})", event.content, event.created_at)
-            }),
+            sources
+                .events
+                .iter()
+                .map(|event| format!("{} ({})", event.content, event.created_at)),
         ));
     }
     if !sources.turns.is_empty() {
         sections.push(format_items(
             "对话摘要",
-            sources.turns.iter().map(|turn| {
-                format!("{} ({})", turn.summary, turn.created_at)
-            }),
+            sources
+                .turns
+                .iter()
+                .map(|turn| format!("{} ({})", turn.summary, turn.created_at)),
         ));
     }
     if !sources.observations.is_empty() {
@@ -304,13 +318,19 @@ pub fn build_life_chapter_prompt(range: &LifeChapterRange, sources: &LifeChapter
                 format!(
                     "{}：{}",
                     line.dimension,
-                    truncate(&serde_json::Value::Array(line.records.clone()).to_string(), 480)
+                    truncate(
+                        &serde_json::Value::Array(line.records.clone()).to_string(),
+                        480
+                    )
                 )
             }),
         ));
     }
 
-    sections.push("请直接输出中文 Markdown 人生章节正文。宁可短而真实，也不要写得完整但缺乏依据。".to_string());
+    sections.push(
+        "请直接输出中文 Markdown 人生章节正文。宁可短而真实，也不要写得完整但缺乏依据。"
+            .to_string(),
+    );
     sections.join("\n\n")
 }
 
@@ -374,12 +394,13 @@ pub fn update_life_chapter(
             format!("Life chapter {note_id} was not found"),
         ));
     }
-    let (start_date, end_date) = parse_chapter_range_from_content(&existing.content).ok_or_else(|| {
-        AppError::new(
-            "lifeChapterMetadataMissing",
-            format!("Life chapter {note_id} is missing date-range metadata"),
-        )
-    })?;
+    let (start_date, end_date) =
+        parse_chapter_range_from_content(&existing.content).ok_or_else(|| {
+            AppError::new(
+                "lifeChapterMetadataMissing",
+                format!("Life chapter {note_id} is missing date-range metadata"),
+            )
+        })?;
     let range = LifeChapterRange::new(&start_date, &end_date)?;
     let title = title.trim().to_string();
     let title = if title.is_empty() {
@@ -445,7 +466,12 @@ pub fn gather_life_chapter_sources(
     let (utc_start, utc_end) = range.utc_range();
     let mut sources = LifeChapterSources {
         events: db.query_events_by_date(user_id, &utc_start, &utc_end, MAX_CHAPTER_EVENTS)?,
-        turns: db.query_conversation_turns_by_date(user_id, &utc_start, &utc_end, MAX_CHAPTER_TURNS)?,
+        turns: db.query_conversation_turns_by_date(
+            user_id,
+            &utc_start,
+            &utc_end,
+            MAX_CHAPTER_TURNS,
+        )?,
         observations: db
             .query_observations(user_id, None, 1000)?
             .into_iter()
@@ -484,7 +510,15 @@ async fn generate_life_chapter_markdown(
             content: prompt,
         },
     ];
-    let output = call_llm(client, config, &messages, None, LIFE_CHAPTER_TEMPERATURE, 3000).await?;
+    let output = call_llm(
+        client,
+        config,
+        &messages,
+        None,
+        LIFE_CHAPTER_TEMPERATURE,
+        3000,
+    )
+    .await?;
     let trimmed = output.trim();
     Ok(normalize_chapter_heading(title, trimmed))
 }
@@ -739,7 +773,13 @@ mod tests {
     fn long_range_sources_are_limited_before_prompting() {
         let mut sources = LifeChapterSources::default();
         sources.events = (0..80)
-            .map(|index| event(&format!("e{index}"), "important event", "2026-06-01T09:00:00Z"))
+            .map(|index| {
+                event(
+                    &format!("e{index}"),
+                    "important event",
+                    "2026-06-01T09:00:00Z",
+                )
+            })
             .collect();
 
         let limited = limit_chapter_sources(sources, 20);
@@ -751,8 +791,16 @@ mod tests {
     fn generated_title_uses_date_range_and_source_theme() {
         let range = LifeChapterRange::new("2026-03-01", "2026-05-31").unwrap();
         let sources = LifeChapterSources {
-            events: vec![event("e1", "Started allowing imperfect work", "2026-04-01T09:00:00Z")],
-            observations: vec![observation("o1", "2026-04-02", "More tolerant of imperfection")],
+            events: vec![event(
+                "e1",
+                "Started allowing imperfect work",
+                "2026-04-01T09:00:00Z",
+            )],
+            observations: vec![observation(
+                "o1",
+                "2026-04-02",
+                "More tolerant of imperfection",
+            )],
             ..Default::default()
         };
 
@@ -775,25 +823,35 @@ mod tests {
             "2026 Jun: A quieter month",
             "# chapter",
             LifeChapterSourceCounts::default(),
-        ).unwrap();
-        let edited = store.update_note(
-            &saved.note_id,
-            SaveNoteRequest {
-                title: "A title edited by user".to_string(),
-                content: "# chapter edited".to_string(),
-                category: "life-chapter".to_string(),
-            },
-        ).unwrap();
+        )
+        .unwrap();
+        let edited = store
+            .update_note(
+                &saved.note_id,
+                SaveNoteRequest {
+                    title: "A title edited by user".to_string(),
+                    content: "# chapter edited".to_string(),
+                    category: "life-chapter".to_string(),
+                },
+            )
+            .unwrap();
 
         assert_eq!(saved.note_id, edited.id);
-        assert_eq!(store.read_note(&saved.note_id).unwrap().title, "A title edited by user");
+        assert_eq!(
+            store.read_note(&saved.note_id).unwrap().title,
+            "A title edited by user"
+        );
     }
 
     #[test]
     fn chapter_prompt_contains_missing_detail_constraints() {
         let range = LifeChapterRange::new("2026-06-01", "2026-06-30").unwrap();
         let mut sources = LifeChapterSources {
-            events: vec![event("e1", "Started a calmer routine", "2026-06-01T09:00:00Z")],
+            events: vec![event(
+                "e1",
+                "Started a calmer routine",
+                "2026-06-01T09:00:00Z",
+            )],
             ..Default::default()
         };
         sources.refresh_counts();
@@ -829,10 +887,8 @@ mod tests {
 
     #[test]
     fn chapter_heading_is_normalized_to_selected_title() {
-        let normalized = normalize_chapter_heading(
-            "2026 6-6: 真实标题",
-            "# 模型自己起的标题\n\n正文内容",
-        );
+        let normalized =
+            normalize_chapter_heading("2026 6-6: 真实标题", "# 模型自己起的标题\n\n正文内容");
 
         assert_eq!(normalized, "# 2026 6-6: 真实标题\n\n正文内容");
     }

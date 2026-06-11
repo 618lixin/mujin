@@ -1,12 +1,12 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Growth Companion",
+  "productName": "槿年",
   "version": "0.1.0",
-  "identifier": "com.growth-companion.app",
+  "identifier": "com.personadiary.desktop",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": "taskkill /F /IM growth-companion.exe 2>nul & npm run build",
+    "beforeBuildCommand": "taskkill /F /IM persona-diary.exe 2>nul & npm run build",
     "frontendDist": "../dist"
   },
   "app": {
@@ -14,7 +14,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "Growth Companion",
+        "title": "槿年",
         "width": 1180,
         "height": 760,
         "minWidth": 900,
@@ -29,7 +29,7 @@
       "csp": null,
       "assetProtocol": {
         "enable": true,
-        "scope": ["$APPDATA/growth-companion/**"]
+        "scope": ["$APPDATA/persona-diary/**"]
       }
     }
   },

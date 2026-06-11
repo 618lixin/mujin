@@ -53,7 +53,7 @@ import {
   getNoteContextMenuItems,
   type NoteContextMenuAction,
 } from "../features/notes/noteContextMenu";
-import { openNotepadWindow, takeStartupFile, toggleTileWindow } from "../features/windows/api";
+import { openDiaryWindow, takeStartupFile, togglePinboardWindow } from "../features/windows/api";
 import {
   closeCurrentWindow,
   minimizeCurrentWindow,
@@ -62,9 +62,9 @@ import {
   startCurrentWindowDrag,
 } from "../features/windows/controls";
 import {
-  TILE_WINDOW_CLOSED_EVENT,
-  TILE_WINDOW_UNPINNED_EVENT,
-  syncPinnedTileIds,
+  PINBOARD_WINDOW_CLOSED_EVENT,
+  PINBOARD_WINDOW_UNPINNED_EVENT,
+  syncPinnedNoteIds,
 } from "../features/windows/tileWindowEvents";
 
 type SaveState = "idle" | "dirty" | "saving" | "saved" | "error";
@@ -269,7 +269,7 @@ export function runEditorUndo(
   return doc.execCommand("undo");
 }
 
-export function pinTileButtonTitle(isPinned: boolean): string {
+export function pinPinboardButtonTitle(isPinned: boolean): string {
   return isPinned ? "取消钉屏" : "钉到屏幕";
 }
 
@@ -312,7 +312,7 @@ export function MainWindow({
   const [noteTransitionKey, setNoteTransitionKey] = useState(0);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [deleteExiting, setDeleteExiting] = useState(false);
-  const [pinnedTileIds, setPinnedTileIds] = useState<Set<string>>(new Set());
+  const [pinnedNoteIds, setPinnedNoteIds] = useState<Set<string>>(new Set());
   const [categories, setCategories] = useState<string[]>([]);
   const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());
   const [activeCategory, setActiveCategory] = useState<string>("");
@@ -702,8 +702,8 @@ export function MainWindow({
   }, []);
 
   useEffect(() => {
-    const unlisten = listen<string>(TILE_WINDOW_CLOSED_EVENT, (event) => {
-      setPinnedTileIds((previous) => syncPinnedTileIds(previous, event.payload, false));
+    const unlisten = listen<string>(PINBOARD_WINDOW_CLOSED_EVENT, (event) => {
+      setPinnedNoteIds((previous) => syncPinnedNoteIds(previous, event.payload, false));
     });
     return () => {
       void unlisten.then((fn) => fn());
@@ -711,8 +711,8 @@ export function MainWindow({
   }, []);
 
   useEffect(() => {
-    const unlisten = listen<string>(TILE_WINDOW_UNPINNED_EVENT, (event) => {
-      setPinnedTileIds((previous) => syncPinnedTileIds(previous, event.payload, false));
+    const unlisten = listen<string>(PINBOARD_WINDOW_UNPINNED_EVENT, (event) => {
+      setPinnedNoteIds((previous) => syncPinnedNoteIds(previous, event.payload, false));
     });
     return () => {
       void unlisten.then((fn) => fn());
@@ -1193,10 +1193,10 @@ export function MainWindow({
     }
   };
 
-  const handleOpenNotepad = async () => {
+  const handleOpenDiary = async () => {
     setErrorMessage(null);
     try {
-      await openNotepadWindow();
+      await openDiaryWindow();
     } catch (error) {
       setErrorMessage(getErrorMessage(error));
     }
@@ -1257,16 +1257,16 @@ export function MainWindow({
 
   const handlePinEntry = async () => {
     if (!selectedId) return;
-    const isPinned = pinnedTileIds.has(selectedId);
+    const isPinned = pinnedNoteIds.has(selectedId);
     if (!isPinned && saveState === "dirty") {
       await saveCurrentNote();
     }
 
     setErrorMessage(null);
     try {
-      const pinned = await toggleTileWindow(selectedId);
-      setPinnedTileIds((previous) => {
-        return syncPinnedTileIds(previous, selectedId, pinned);
+      const pinned = await togglePinboardWindow(selectedId);
+      setPinnedNoteIds((previous) => {
+        return syncPinnedNoteIds(previous, selectedId, pinned);
       });
     } catch (error) {
       setErrorMessage(getErrorMessage(error));
@@ -1306,7 +1306,7 @@ export function MainWindow({
     }
   };
 
-  const selectedTilePinned = selectedId ? pinnedTileIds.has(selectedId) : false;
+  const selectedPinboardPinned = selectedId ? pinnedNoteIds.has(selectedId) : false;
 
   const handleTitleBarDrag = (event: MouseEvent<HTMLDivElement>) => {
     if ((event.target as HTMLElement).closest("button")) return;
@@ -1345,7 +1345,7 @@ export function MainWindow({
         >
           <div className="flex items-center gap-3 min-w-0">
             <span className="text-[13px] font-display font-medium text-ink-soft tracking-wide">
-              Growth Companion
+              槿年
             </span>
             <span className="text-[11px] text-ink-ghost font-body">—</span>
             <span className="text-[11px] text-ink-faint font-body truncate max-w-[240px]">
@@ -1366,9 +1366,9 @@ export function MainWindow({
               </span>
             )}
             <button
-              onClick={() => void handleOpenNotepad()}
+              onClick={() => void handleOpenDiary()}
               className="w-10 h-11 flex items-center justify-center text-ink-ghost hover:text-bamboo hover:bg-bamboo-mist/50 transition-all cursor-pointer"
-              title={t("main.window.quickNotepad", { defaultValue: "快捷便签" })}
+              title={t("main.window.quickDiary", { defaultValue: "快捷便签" })}
             >
               <svg
                 width="14"
@@ -2050,13 +2050,13 @@ export function MainWindow({
                 <button
                   onClick={() => void handlePinEntry()}
                   disabled={!selectedId}
-                  aria-label={pinTileButtonTitle(selectedTilePinned)}
+                  aria-label={pinPinboardButtonTitle(selectedPinboardPinned)}
                   className={`w-7 h-7 flex items-center justify-center rounded-lg transition-all cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed ${
-                    selectedTilePinned
+                    selectedPinboardPinned
                       ? "text-bamboo bg-bamboo-mist/40 hover:text-red-400 hover:bg-danger-bg"
                       : "text-ink-ghost hover:text-bamboo hover:bg-bamboo-mist/50"
                   }`}
-                  title={pinTileButtonTitle(selectedTilePinned)}
+                  title={pinPinboardButtonTitle(selectedPinboardPinned)}
                 >
                   <svg
                     width="13"

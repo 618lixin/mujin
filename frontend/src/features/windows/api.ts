@@ -7,18 +7,18 @@ export interface WindowBounds {
   height: number;
 }
 
-export function openNotepadWindow(noteId?: string, bounds?: WindowBounds): Promise<string> {
-  return invoke("open_notepad_window", {
+export function openDiaryWindow(noteId?: string, bounds?: WindowBounds): Promise<string> {
+  return invoke("open_diary_window", {
     noteId: noteId ?? null,
     bounds: bounds ?? null,
   });
 }
 
-export function openTileWindow(noteId: string, bounds?: WindowBounds): Promise<string> {
+export function openPinboardWindow(noteId: string, bounds?: WindowBounds): Promise<string> {
   return invoke("open_tile_window", { noteId, bounds: bounds ?? null });
 }
 
-export function toggleTileWindow(noteId: string, bounds?: WindowBounds): Promise<boolean> {
+export function togglePinboardWindow(noteId: string, bounds?: WindowBounds): Promise<boolean> {
   return invoke("toggle_tile_window", { noteId, bounds: bounds ?? null });
 }
 

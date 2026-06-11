@@ -289,8 +289,7 @@ pub fn build_weekly_summary_prompt(
     }
 
     sections.push(
-        "请直接输出中文 Markdown 周总结正文。宁可短而真实，也不要写得丰富但缺乏依据。"
-            .to_string(),
+        "请直接输出中文 Markdown 周总结正文。宁可短而真实，也不要写得丰富但缺乏依据。".to_string(),
     );
     sections.join("\n\n")
 }
@@ -580,26 +579,42 @@ mod tests {
     #[test]
     fn aggregates_weekly_sources_and_counts_by_type() {
         let store = temp_store("aggregate");
+        let today = chrono::Utc::now().date_naive();
+        let current_week = today.iso_week();
+        let identity =
+            WeeklySummaryIdentity::new(current_week.year(), current_week.week()).unwrap();
         store.create_category("diary").unwrap();
-        store.create_note(SaveNoteRequest {
-            title: "2026-06-02".to_string(),
-            content: "# 2026-06-02\n\nDiary body".to_string(),
-            category: "diary".to_string(),
-        }).unwrap();
-        store.create_note(SaveNoteRequest {
-            title: "Loose note".to_string(),
-            content: "A note from the same week".to_string(),
-            category: String::new(),
-        }).unwrap();
+        store
+            .create_note(SaveNoteRequest {
+                title: today.to_string(),
+                content: format!("# {today}\n\nDiary body"),
+                category: "diary".to_string(),
+            })
+            .unwrap();
+        store
+            .create_note(SaveNoteRequest {
+                title: "Loose note".to_string(),
+                content: "A note from the same week".to_string(),
+                category: String::new(),
+            })
+            .unwrap();
 
         let sources = WeeklySummarySources::from_parts(
-            vec![event("e1", "Finished a difficult task", "2026-06-03T09:00:00Z")],
+            vec![event(
+                "e1",
+                "Finished a difficult task",
+                "2026-06-03T09:00:00Z",
+            )],
             vec![turn(1, "Talked about recovery", "2026-06-04T09:00:00Z")],
-            vec![observation("o1", "2026-06-05", "More patient under pressure")],
+            vec![observation(
+                "o1",
+                "2026-06-05",
+                "More patient under pressure",
+            )],
             vec![],
             vec![],
             vec![],
-            collect_notes_for_week(&store, &WeeklySummaryIdentity::new(2026, 23).unwrap()).unwrap(),
+            collect_notes_for_week(&store, &identity).unwrap(),
         );
 
         assert_eq!(sources.counts.diary_count, 1);
@@ -626,9 +641,17 @@ mod tests {
     fn weekly_prompt_includes_counts_and_grounding_rules() {
         let identity = WeeklySummaryIdentity::new(2026, 23).unwrap();
         let sources = WeeklySummarySources::from_parts(
-            vec![event("e1", "Finished a difficult task", "2026-06-03T09:00:00Z")],
+            vec![event(
+                "e1",
+                "Finished a difficult task",
+                "2026-06-03T09:00:00Z",
+            )],
             vec![],
-            vec![observation("o1", "2026-06-05", "More patient under pressure")],
+            vec![observation(
+                "o1",
+                "2026-06-05",
+                "More patient under pressure",
+            )],
             vec![],
             vec![],
             vec![],
@@ -659,18 +682,23 @@ mod tests {
             "first body",
             WeeklySourceCounts::default(),
             false,
-        ).unwrap();
+        )
+        .unwrap();
         let second = save_weekly_summary_note(
             &store,
             &identity,
             "second body",
             WeeklySourceCounts::default(),
             true,
-        ).unwrap();
+        )
+        .unwrap();
 
         assert_eq!(first.note_id, second.note_id);
         assert_eq!(store.list_notes().unwrap().len(), 1);
-        assert_eq!(store.read_note(&first.note_id).unwrap().content, "second body");
+        assert_eq!(
+            store.read_note(&first.note_id).unwrap().content,
+            "second body"
+        );
     }
 
     #[test]
@@ -683,10 +711,22 @@ mod tests {
         let store = temp_store("list");
         let first = WeeklySummaryIdentity::new(2026, 22).unwrap();
         let second = WeeklySummaryIdentity::new(2026, 23).unwrap();
-        save_weekly_summary_note(&store, &first, "first", WeeklySourceCounts::default(), false)
-            .unwrap();
-        save_weekly_summary_note(&store, &second, "second", WeeklySourceCounts::default(), false)
-            .unwrap();
+        save_weekly_summary_note(
+            &store,
+            &first,
+            "first",
+            WeeklySourceCounts::default(),
+            false,
+        )
+        .unwrap();
+        save_weekly_summary_note(
+            &store,
+            &second,
+            "second",
+            WeeklySourceCounts::default(),
+            false,
+        )
+        .unwrap();
 
         let entries = list_weekly_summaries(&store).unwrap();
 

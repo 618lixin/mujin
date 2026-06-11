@@ -4,13 +4,13 @@ import { listen } from "@tauri-apps/api/event";
 import { getConfig } from "../features/settings/api";
 import type { AppConfig } from "../features/settings/types";
 import { requestSurfaceAction } from "../features/windows/surfaceActions";
-import { getTileContextMenuItems } from "../features/windows/tileContextMenu";
+import { getPinboardContextMenuItems } from "../features/windows/tileContextMenu";
 
 interface MenuState {
   x: number;
   y: number;
   hasSelection: boolean;
-  type: "edit" | "tile";
+  type: "edit" | "pinboard";
 }
 
 export function ContextMenuProvider({ children }: { children: React.ReactNode }) {
@@ -18,17 +18,17 @@ export function ContextMenuProvider({ children }: { children: React.ReactNode })
   const [menu, setMenu] = useState<MenuState | null>(null);
   const [menuClosing, setMenuClosing] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
-  const tileCtrlCloseRef = useRef(true);
-  const tileContextMenuItems = useMemo(() => getTileContextMenuItems(t), [t]);
+  const pinboardCtrlCloseRef = useRef(true);
+  const pinboardContextMenuItems = useMemo(() => getPinboardContextMenuItems(t), [t]);
 
   useEffect(() => {
     getConfig()
       .then((c) => {
-        tileCtrlCloseRef.current = c.tileCtrlClose ?? true;
+        pinboardCtrlCloseRef.current = c.tileCtrlClose ?? true;
       })
       .catch(() => {});
     const unlisten = listen<AppConfig>("config-changed", (event) => {
-      tileCtrlCloseRef.current = event.payload.tileCtrlClose ?? true;
+      pinboardCtrlCloseRef.current = event.payload.tileCtrlClose ?? true;
     });
     return () => {
       void unlisten.then((fn) => fn());
@@ -40,16 +40,16 @@ export function ContextMenuProvider({ children }: { children: React.ReactNode })
       const target = event.target as HTMLElement;
       const isEditable =
         target.tagName === "TEXTAREA" || target.tagName === "INPUT" || target.isContentEditable;
-      const tileTarget = target.closest<HTMLElement>('[data-context-menu="tile"]');
+      const pinboardTarget = target.closest<HTMLElement>('[data-context-menu="pinboard"]');
 
-      if (!isEditable && !tileTarget) {
+      if (!isEditable && !pinboardTarget) {
         event.preventDefault();
         return;
       }
 
       event.preventDefault();
 
-      if (tileTarget && event.ctrlKey && tileCtrlCloseRef.current) {
+      if (pinboardTarget && event.ctrlKey && pinboardCtrlCloseRef.current) {
         requestSurfaceAction("close");
         return;
       }
@@ -58,17 +58,17 @@ export function ContextMenuProvider({ children }: { children: React.ReactNode })
       let x = event.clientX;
       let y = event.clientY;
       const menuWidth = 160;
-      const menuHeight = tileTarget ? 150 : 170;
+      const menuHeight = pinboardTarget ? 150 : 170;
       if (x + menuWidth > window.innerWidth) x = window.innerWidth - menuWidth - 4;
       if (y + menuHeight > window.innerHeight) y = window.innerHeight - menuHeight - 4;
 
-      if (tileTarget) {
+      if (pinboardTarget) {
         setMenuClosing(false);
         setMenu({
           x,
           y,
           hasSelection: false,
-          type: "tile",
+          type: "pinboard",
         });
         return;
       }
@@ -113,7 +113,7 @@ export function ContextMenuProvider({ children }: { children: React.ReactNode })
     dismissMenu();
   };
 
-  const runSurfaceAction = (action: (typeof tileContextMenuItems)[number]["action"]) => {
+  const runSurfaceAction = (action: (typeof pinboardContextMenuItems)[number]["action"]) => {
     requestSurfaceAction(action);
     dismissMenu();
   };
@@ -121,8 +121,8 @@ export function ContextMenuProvider({ children }: { children: React.ReactNode })
   const items = useMemo(
     () =>
       menu
-        ? menu.type === "tile"
-          ? tileContextMenuItems.map((item) => ({
+        ? menu.type === "pinboard"
+          ? pinboardContextMenuItems.map((item) => ({
               ...item,
               shortcut: "",
               action: () => runSurfaceAction(item.action),
@@ -156,7 +156,7 @@ export function ContextMenuProvider({ children }: { children: React.ReactNode })
               },
             ]
         : [],
-    [menu, runCommand, t, tileContextMenuItems],
+    [menu, runCommand, t, pinboardContextMenuItems],
   );
 
   return (

@@ -4,6 +4,19 @@
 !.env.example
 data/
 
+# Local process docs and submission artifacts
+docs/
+openspec/
+prd.md
+AGENTS.md
+CLAUDE.md
+
+# Local agent and browser runtime state
+.agents/
+.claude/
+.playwright-mcp/
+.codex/
+
 # Frontend / Tauri
 frontend/node_modules/
 frontend/dist/
@@ -11,9 +24,9 @@ frontend/.vite/
 frontend/src-tauri/target/
 frontend/src-tauri/gen/
 
-# Local agent and browser runtime state
-.playwright-mcp/
-.codex/
+# Local generated assets / reference material
+/黑白剪影.avif
+/*.pdf
 
 # IDE
 .vscode/

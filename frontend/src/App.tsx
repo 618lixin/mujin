@@ -82,7 +82,7 @@ function App() {
       <div className="app-window-shell h-screen font-body text-ink overflow-hidden">
         {activeView === "main" ? (
           <MainWindow />
-        ) : activeView === "notepad" ? (
+        ) : activeView === "diary" ? (
           <NotePad initialNoteId={route.noteId} />
         ) : (
           <TileShowcase noteId={route.noteId} />

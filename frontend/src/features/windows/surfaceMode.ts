@@ -1,19 +1,19 @@
 import type { WindowBounds } from "./api";
 
-export type NoteSurfaceMode = "pad" | "tile";
+export type NoteSurfaceMode = "pad" | "pinboard";
 
-export const NOTE_SURFACE_MODE_EVENT = "growth-companion:surface-mode";
+export const NOTE_SURFACE_MODE_EVENT = "persona-diary:surface-mode";
 
 export const SURFACE_WINDOW_SIZES: Record<
   NoteSurfaceMode,
   Pick<WindowBounds, "width" | "height">
 > = {
   pad: { width: 260, height: 260 },
-  tile: { width: 260, height: 260 },
+  pinboard: { width: 260, height: 260 },
 };
 
 export function isNoteSurfaceMode(value: unknown): value is NoteSurfaceMode {
-  return value === "pad" || value === "tile";
+  return value === "pad" || value === "pinboard";
 }
 
 export function getSurfaceTargetBounds(

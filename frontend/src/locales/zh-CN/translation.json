@@ -21,7 +21,7 @@
       "paste": "粘贴",
       "selectAll": "全选"
     },
-    "tile": {
+    "pinboard": {
       "close": "取消钉屏",
       "copy": "复制",
       "save": "保存",
@@ -127,7 +127,7 @@
       "expandSidebar": "展开侧栏",
       "maximize": "最大化",
       "minimize": "最小化",
-      "quickNotepad": "快捷便签",
+      "quickDiary": "快捷便签",
       "restore": "还原",
       "settings": "设置"
     }
@@ -137,7 +137,7 @@
     "export": "导出 Markdown",
     "moveToCategory": "移动到分类…"
   },
-  "notepad": {
+  "diary": {
     "button": {
       "clear": "清空"
     },
@@ -165,7 +165,7 @@
     "tooltip": {
       "close": "关闭",
       "openInEditor": "在编辑器中打开",
-      "pinToTile": "转为磁贴"
+      "pinToPinboard": "转为磁贴"
     }
   },
   "settings": {
@@ -186,12 +186,6 @@
     "fontSize": {
       "editor": "编辑器字号",
       "surface": "小窗/磁贴字号"
-    },
-    "locale": {
-      "enUS": "English",
-      "label": "语言",
-      "zhCN": "简体中文",
-      "zhHK": "繁體中文"
     },
     "notesDir": "日记目录",
     "openAtCursor": "快捷键打开时跟随鼠标位置",
@@ -224,13 +218,13 @@
       "light": "浅色",
       "system": "跟随系统"
     },
-    "tileColor": {
+    "pinboardColor": {
       "custom": "自定义",
       "followTheme": "跟随主题",
       "label": "磁贴颜色"
     },
-    "tileCtrlClose": "Ctrl+右键快速关闭磁贴",
-    "tileRenderMarkdown": "磁贴渲染 Markdown",
+    "pinboardCtrlClose": "Ctrl+右键快速关闭磁贴",
+    "pinboardRenderMarkdown": "磁贴渲染 Markdown",
     "renderHtmlMarkdown": "允许 HTML 标签渲染",
     "title": "应用设置",
     "visibilityShortcut": "显示/隐藏窗口快捷键",
@@ -251,7 +245,7 @@
       }
     }
   },
-  "tile": {
+  "pinboard": {
     "empty": "空"
   }
 }

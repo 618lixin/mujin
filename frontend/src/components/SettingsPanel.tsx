@@ -19,7 +19,6 @@ import {
 } from "../features/settings/shortcutRecorder";
 import { DEFAULT_TILE_COLOR, normalizeTileColor } from "../features/settings/tileColor";
 import { applyTheme, watchSystemTheme } from "../features/settings/theme";
-import { SUPPORTED_LOCALES } from "../locales/locale-whitelist";
 import { SlidingButtonGroup } from "./SlidingButtonGroup";
 
 const HARMONY_FONT_LICENSE_URL = new URL("../assets/fonts/LICENSE_Fonts", import.meta.url).href;
@@ -59,11 +58,11 @@ export function SettingsPanel({
     () => [
       {
         value: "system",
-        label: t("settings.tileColor.followTheme", { defaultValue: "跟随主题" }),
+        label: t("settings.pinboardColor.followTheme", { defaultValue: "跟随主题" }),
       },
       {
         value: "custom",
-        label: t("settings.tileColor.custom", { defaultValue: "自定义" }),
+        label: t("settings.pinboardColor.custom", { defaultValue: "自定义" }),
       },
     ],
     [t],
@@ -98,20 +97,6 @@ export function SettingsPanel({
     ],
     [t],
   );
-  const localeOptions = useMemo(
-    () =>
-      SUPPORTED_LOCALES.map((locale) => ({
-        value: locale,
-        label:
-          locale === "zh-CN"
-            ? t("settings.locale.zhCN", { defaultValue: "简体中文" })
-            : locale === "en-US"
-              ? t("settings.locale.enUS", { defaultValue: "English" })
-              : t("settings.locale.zhHK", { defaultValue: "繁體中文" }),
-      })),
-    [t],
-  );
-
   return (
     <aside className="w-[360px] h-full shrink-0 border-l border-paper-deep/30 bg-cloud/92 backdrop-blur-sm flex flex-col">
       <div className="flex items-center justify-between h-11 shrink-0 px-4 border-b border-paper-deep/25">
@@ -242,17 +227,6 @@ export function SettingsPanel({
         </section>
 
         <section className="space-y-2">
-          <label className="block text-[11px] font-body text-ink-faint">
-            {t("settings.locale.label", { defaultValue: "语言" })}
-          </label>
-          <SlidingButtonGroup
-            options={localeOptions}
-            value={config.locale}
-            onChange={(value) => setConfigValue("locale", value)}
-          />
-        </section>
-
-        <section className="space-y-2">
           <ToggleRow
             label={t("settings.closeToTray", { defaultValue: "关闭到托盘" })}
             checked={config.closeToTray}
@@ -284,7 +258,7 @@ export function SettingsPanel({
             onChange={(checked) => setConfigValue("rememberSurfaceSize", checked)}
           />
           <ToggleRow
-            label={t("settings.tileRenderMarkdown", { defaultValue: "磁贴渲染 Markdown" })}
+            label={t("settings.pinboardRenderMarkdown", { defaultValue: "磁贴渲染 Markdown" })}
             checked={config.tileRenderMarkdown}
             onChange={(checked) => setConfigValue("tileRenderMarkdown", checked)}
           />
@@ -298,7 +272,7 @@ export function SettingsPanel({
         {/* 快捷键功能设置区域，与上方常规设置分开 */}
         <section className="space-y-2">
           <ToggleRow
-            label={t("settings.tileCtrlClose", { defaultValue: "Ctrl+右键快速关闭磁贴" })}
+            label={t("settings.pinboardCtrlClose", { defaultValue: "Ctrl+右键快速关闭磁贴" })}
             checked={config.tileCtrlClose}
             onChange={(checked) => setConfigValue("tileCtrlClose", checked)}
           />
@@ -389,7 +363,7 @@ export function SettingsPanel({
 
         <section className="space-y-2">
           <label className="block text-[11px] font-body text-ink-faint">
-            {t("settings.tileColor.label", { defaultValue: "磁贴颜色" })}
+            {t("settings.pinboardColor.label", { defaultValue: "磁贴颜色" })}
           </label>
           <SlidingButtonGroup
             options={tileColorModes}

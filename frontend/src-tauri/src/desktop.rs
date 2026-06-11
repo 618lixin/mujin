@@ -30,7 +30,7 @@ const TRAY_QUICK_NOTE_ID: &str = "quick-note";
 const TRAY_TOGGLE_CLOSE_TO_TRAY_ID: &str = "toggle-close-to-tray";
 const TRAY_TOGGLE_AUTOSTART_ID: &str = "toggle-autostart";
 const TRAY_QUIT_ID: &str = "quit";
-const NOTEPAD_POOL_CAPACITY: usize = 2;
+const DIARY_POOL_CAPACITY: usize = 2;
 
 /// Stores the file path passed as a command-line argument on cold start.
 /// The frontend retrieves and clears this value after initialization via
@@ -151,30 +151,30 @@ struct RuntimeState {
 #[cfg(desktop)]
 #[derive(Clone, Default)]
 struct ShortcutBindings {
-    open_notepad: Option<Shortcut>,
+    open_diary: Option<Shortcut>,
     toggle_visibility: Option<Shortcut>,
 }
 
 #[cfg(desktop)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ShortcutAction {
-    OpenNotepad,
+    OpenDiary,
     ToggleVisibility,
 }
 
 #[derive(Default)]
-struct NotepadPool {
+struct DiaryPool {
     available: Mutex<Vec<String>>,
 }
 
-impl NotepadPool {
+impl DiaryPool {
     fn take(&self) -> Option<String> {
         self.available.lock().ok()?.pop()
     }
 
     fn put(&self, label: String) -> bool {
         if let Ok(mut available) = self.available.lock() {
-            if available.len() < NOTEPAD_POOL_CAPACITY {
+            if available.len() < DIARY_POOL_CAPACITY {
                 available.push(label);
                 return true;
             }
@@ -185,7 +185,7 @@ impl NotepadPool {
     fn is_below_capacity(&self) -> bool {
         self.available
             .lock()
-            .map(|a| a.len() < NOTEPAD_POOL_CAPACITY)
+            .map(|a| a.len() < DIARY_POOL_CAPACITY)
             .unwrap_or(false)
     }
 }
@@ -245,7 +245,7 @@ impl RuntimeState {
             .lock()
             .ok()
             .and_then(|bindings| bindings.action_for(shortcut))
-            .unwrap_or(ShortcutAction::OpenNotepad)
+            .unwrap_or(ShortcutAction::OpenDiary)
     }
 }
 
@@ -258,8 +258,8 @@ impl ShortcutBindings {
             .is_some_and(|s| s == shortcut)
         {
             Some(ShortcutAction::ToggleVisibility)
-        } else if self.open_notepad.as_ref().is_some_and(|s| s == shortcut) {
-            Some(ShortcutAction::OpenNotepad)
+        } else if self.open_diary.as_ref().is_some_and(|s| s == shortcut) {
+            Some(ShortcutAction::OpenDiary)
         } else {
             None
         }
@@ -286,7 +286,7 @@ pub fn tray_menu_specs(locale: Locale, close_to_tray: bool, autostart: bool) -> 
         },
         TrayMenuSpec {
             id: TRAY_QUICK_NOTE_ID,
-            label: locales::tray_quick_note_label(locale),
+            label: locales::tray_quick_entry_label(locale),
             checked: None,
         },
         TrayMenuSpec {
@@ -323,7 +323,7 @@ fn build_tray_menu(app: &AppHandle, config: &AppConfig) -> Result<Menu<Wry>, Box
     let specs = tray_menu_specs(locale, config.close_to_tray, autostart);
 
     let show_main = MenuItem::with_id(app, specs[0].id, specs[0].label, true, None::<&str>)?;
-    let quick_note = MenuItem::with_id(app, specs[1].id, specs[1].label, true, None::<&str>)?;
+    let quick_entry = MenuItem::with_id(app, specs[1].id, specs[1].label, true, None::<&str>)?;
     let close_to_tray = CheckMenuItem::with_id(
         app,
         specs[2].id,
@@ -347,7 +347,7 @@ fn build_tray_menu(app: &AppHandle, config: &AppConfig) -> Result<Menu<Wry>, Box
         app,
         &[
             &show_main,
-            &quick_note,
+            &quick_entry,
             &close_to_tray,
             &autostart,
             &separator,
@@ -375,10 +375,10 @@ fn refresh_window_titles(app: &AppHandle, config: &AppConfig) -> Result<(), AppE
     }
 
     for (label, window) in app.webview_windows() {
-        if label.starts_with("notepad-") {
-            window.set_title(locales::notepad_window_title(locale))?;
-        } else if label.starts_with("tile-") {
-            window.set_title(locales::tile_window_title(locale))?;
+        if label.starts_with("diary-") {
+            window.set_title(locales::diary_window_title(locale))?;
+        } else if label.starts_with("pinboard-") {
+            window.set_title(locales::pinboard_window_title(locale))?;
         }
     }
 
@@ -491,7 +491,7 @@ fn clear_hidden_window_state(app: &AppHandle) {
     };
 
     for label in &labels {
-        if label.starts_with("notepad-") || label.starts_with("tile-") {
+        if label.starts_with("diary-") || label.starts_with("pinboard-") {
             if let Some(window) = app.get_webview_window(label) {
                 let _ = window.close();
             }
@@ -552,12 +552,12 @@ pub fn apply_runtime_config(
     Ok(())
 }
 
-pub async fn open_notepad_window(
+pub async fn open_diary_window(
     app: AppHandle,
     note_id: Option<String>,
     bounds: Option<WindowBounds>,
 ) -> Result<String, AppError> {
-    open_notepad_window_now(&app, note_id.as_deref(), bounds)
+    open_diary_window_now(&app, note_id.as_deref(), bounds)
 }
 
 pub async fn open_tile_window(
@@ -594,13 +594,13 @@ pub fn take_startup_file() -> Option<String> {
 
 pub fn setup_desktop(app: &mut App) -> Result<(), Box<dyn Error>> {
     app.manage(RuntimeState::default());
-    app.manage(NotepadPool::default());
+    app.manage(DiaryPool::default());
     setup_autostart_plugin(app.handle())?;
     setup_global_shortcut_plugin(app.handle())?;
     sync_autostart_to_config(app.handle());
     register_configured_global_shortcut(app.handle());
     setup_tray(app)?;
-    schedule_notepad_prewarm(app.handle());
+    schedule_diary_prewarm(app.handle());
 
     if !std::env::args().any(|a| a == "--silent") {
         if let Err(error) = show_main_window(app.handle()) {
@@ -620,7 +620,7 @@ pub fn setup_desktop(app: &mut App) -> Result<(), Box<dyn Error>> {
 
 pub fn handle_window_event(window: &Window, event: &WindowEvent) {
     if matches!(event, WindowEvent::Destroyed) {
-        if let Some(note_id) = window.label().strip_prefix("tile-") {
+        if let Some(note_id) = window.label().strip_prefix("pinboard-") {
             let _ = window
                 .app_handle()
                 .emit("tile-window-closed", note_id.to_string());
@@ -710,7 +710,7 @@ fn handle_tray_menu_event(app: &AppHandle, id: &str) -> Result<(), Box<dyn Error
     match tray_menu_action(id) {
         Some(TrayMenuAction::ShowMain) => show_main_window(app)?,
         Some(TrayMenuAction::QuickNote) => {
-            open_notepad_window_now(app, None, None)?;
+            open_diary_window_now(app, None, None)?;
         }
         Some(TrayMenuAction::ToggleCloseToTray) => {
             let config = toggle_close_to_tray(app)?;
@@ -783,24 +783,24 @@ pub fn show_main_window(app: &AppHandle) -> Result<(), AppError> {
     Ok(())
 }
 
-fn open_notepad_window_now(
+fn open_diary_window_now(
     app: &AppHandle,
     note_id: Option<&str>,
     bounds: Option<WindowBounds>,
 ) -> Result<String, AppError> {
     if note_id.is_none() {
-        if let Some(reused) = activate_pooled_notepad(app, bounds) {
+        if let Some(reused) = activate_pooled_diary(app, bounds) {
             clear_hidden_window_state(app);
             return Ok(reused);
         }
     }
 
     let locale = configured_locale();
-    let label = notepad_window_label(note_id);
+    let label = diary_window_label(note_id);
     let specs = saved_surface_specs(app);
     let url = match note_id {
-        Some(id) => format!("index.html?view=notepad&noteId={id}"),
-        None => "index.html?view=notepad".to_string(),
+        Some(id) => format!("index.html?view=diary&noteId={id}"),
+        None => "index.html?view=diary".to_string(),
     };
 
     open_or_focus_window(
@@ -808,7 +808,7 @@ fn open_notepad_window_now(
         &label,
         WindowOpenOptions {
             url,
-            title: locales::notepad_window_title(locale).to_string(),
+            title: locales::diary_window_title(locale).to_string(),
             specs,
             decorations: false,
             always_on_top: true,
@@ -819,26 +819,26 @@ fn open_notepad_window_now(
     )
 }
 
-fn activate_pooled_notepad(app: &AppHandle, bounds: Option<WindowBounds>) -> Option<String> {
-    let pool = app.try_state::<NotepadPool>()?;
+fn activate_pooled_diary(app: &AppHandle, bounds: Option<WindowBounds>) -> Option<String> {
+    let pool = app.try_state::<DiaryPool>()?;
     let label = pool.take()?;
     let window = app.get_webview_window(&label)?;
     let locale = configured_locale();
 
     let specs = saved_surface_specs(app);
-    let _ = window.set_title(locales::notepad_window_title(locale));
+    let _ = window.set_title(locales::diary_window_title(locale));
     let _ = window.set_size(tauri::LogicalSize::new(specs.width, specs.height));
     let _ = apply_window_bounds(&window, bounds);
     let _ = window.show();
     let _ = window.set_focus();
-    let _ = window.emit("notepad:activate", label.clone());
+    let _ = window.emit("diary:activate", label.clone());
 
-    schedule_notepad_replenish(app, 100);
+    schedule_diary_replenish(app, 100);
 
     Some(label)
 }
 
-pub fn recycle_notepad_window(app: &AppHandle, label: &str) -> Result<(), AppError> {
+pub fn recycle_diary_window(app: &AppHandle, label: &str) -> Result<(), AppError> {
     let Some(window) = app.get_webview_window(label) else {
         return Ok(());
     };
@@ -848,7 +848,7 @@ pub fn recycle_notepad_window(app: &AppHandle, label: &str) -> Result<(), AppErr
     window.hide()?;
 
     let recycled = app
-        .try_state::<NotepadPool>()
+        .try_state::<DiaryPool>()
         .map(|pool| pool.put(label.to_string()))
         .unwrap_or(false);
 
@@ -888,33 +888,33 @@ fn save_surface_size(window: &tauri::WebviewWindow) {
 }
 
 fn should_save_surface_size_before_close(label: &str) -> bool {
-    label.starts_with("notepad-") || label.starts_with("tile-")
+    label.starts_with("diary-") || label.starts_with("pinboard-")
 }
 
-fn schedule_notepad_prewarm(app: &AppHandle) {
-    for i in 0..NOTEPAD_POOL_CAPACITY {
+fn schedule_diary_prewarm(app: &AppHandle) {
+    for i in 0..DIARY_POOL_CAPACITY {
         let delay = 800 + i as u64 * 400;
-        schedule_notepad_replenish(app, delay);
+        schedule_diary_replenish(app, delay);
     }
 }
 
-fn schedule_notepad_replenish(app: &AppHandle, delay_ms: u64) {
+fn schedule_diary_replenish(app: &AppHandle, delay_ms: u64) {
     let handle = app.clone();
     std::thread::spawn(move || {
         std::thread::sleep(std::time::Duration::from_millis(delay_ms));
         let handle_inner = handle.clone();
         let _ = handle.run_on_main_thread(move || {
-            if let Err(error) = prewarm_notepad(&handle_inner) {
-                eprintln!("failed to replenish notepad pool: {error}");
+            if let Err(error) = prewarm_diary(&handle_inner) {
+                eprintln!("failed to replenish diary pool: {error}");
             }
         });
     });
 }
 
-fn prewarm_notepad(app: &AppHandle) -> Result<(), AppError> {
-    let pool = app.try_state::<NotepadPool>().ok_or_else(|| AppError {
+fn prewarm_diary(app: &AppHandle) -> Result<(), AppError> {
+    let pool = app.try_state::<DiaryPool>().ok_or_else(|| AppError {
         code: "noPool".into(),
-        message: "notepad pool not initialized".into(),
+        message: "diary pool not initialized".into(),
         details: Default::default(),
     })?;
 
@@ -922,17 +922,17 @@ fn prewarm_notepad(app: &AppHandle) -> Result<(), AppError> {
         return Ok(());
     }
 
-    let label = notepad_window_label(None);
-    let specs = notepad_window_specs();
+    let label = diary_window_label(None);
+    let specs = diary_window_specs();
     let visual_options = dynamic_window_visual_options(&label);
     let locale = configured_locale();
 
     WebviewWindowBuilder::new(
         app,
         &label,
-        WebviewUrl::App("index.html?view=notepad&standby=1".into()),
+        WebviewUrl::App("index.html?view=diary&standby=1".into()),
     )
-    .title(locales::notepad_window_title(locale))
+    .title(locales::diary_window_title(locale))
     .inner_size(specs.width, specs.height)
     .min_inner_size(specs.min_width, specs.min_height)
     .resizable(true)
@@ -950,7 +950,7 @@ fn prewarm_notepad(app: &AppHandle) -> Result<(), AppError> {
     Ok(())
 }
 
-fn notepad_window_specs() -> WindowSizeSpec {
+fn diary_window_specs() -> WindowSizeSpec {
     WindowSizeSpec {
         width: 260.0,
         height: 260.0,
@@ -1038,7 +1038,7 @@ fn cursor_centered_bounds(_specs: &WindowSizeSpec) -> Option<WindowBounds> {
 }
 
 fn saved_surface_specs(app: &AppHandle) -> WindowSizeSpec {
-    let defaults = notepad_window_specs();
+    let defaults = diary_window_specs();
     let Ok(config) = load_config() else {
         return defaults;
     };
@@ -1065,7 +1065,7 @@ fn saved_surface_specs(app: &AppHandle) -> WindowSizeSpec {
 fn visible_surface_size(app: &AppHandle) -> Option<(f64, f64)> {
     let mut fallback: Option<(f64, f64)> = None;
     for (label, window) in app.webview_windows() {
-        if !label.starts_with("notepad-") && !label.starts_with("tile-") {
+        if !label.starts_with("diary-") && !label.starts_with("pinboard-") {
             continue;
         }
         if !window.is_visible().unwrap_or(false) {
@@ -1093,8 +1093,8 @@ fn open_tile_window_now(
     bounds: Option<WindowBounds>,
 ) -> Result<String, AppError> {
     let locale = configured_locale();
-    let label = tile_window_label(note_id);
-    let url = format!("index.html?view=tile&noteId={note_id}");
+    let label = pinboard_window_label(note_id);
+    let url = format!("index.html?view=pinboard&noteId={note_id}");
 
     let specs = saved_surface_specs(app);
 
@@ -1103,7 +1103,7 @@ fn open_tile_window_now(
         &label,
         WindowOpenOptions {
             url,
-            title: locales::tile_window_title(locale).to_string(),
+            title: locales::pinboard_window_title(locale).to_string(),
             specs,
             decorations: false,
             always_on_top: true,
@@ -1119,7 +1119,7 @@ fn toggle_tile_window_now(
     note_id: &str,
     bounds: Option<WindowBounds>,
 ) -> Result<bool, AppError> {
-    let label = tile_window_label(note_id);
+    let label = pinboard_window_label(note_id);
     if let Some(window) = app.get_webview_window(&label) {
         window.close()?;
         return Ok(false);
@@ -1178,20 +1178,20 @@ fn apply_window_bounds(
     Ok(())
 }
 
-fn notepad_window_label(note_id: Option<&str>) -> String {
+fn diary_window_label(note_id: Option<&str>) -> String {
     match note_id {
-        Some(id) => format!("notepad-{}", sanitize_label_part(id)),
-        None => format!("notepad-{}", Uuid::new_v4()),
+        Some(id) => format!("diary-{}", sanitize_label_part(id)),
+        None => format!("diary-{}", Uuid::new_v4()),
     }
 }
 
-fn tile_window_label(note_id: &str) -> String {
-    format!("tile-{}", sanitize_label_part(note_id))
+fn pinboard_window_label(note_id: &str) -> String {
+    format!("pinboard-{}", sanitize_label_part(note_id))
 }
 
 fn dynamic_window_visual_options(label: &str) -> DynamicWindowVisualOptions {
     let is_app_surface =
-        label == MAIN_WINDOW_LABEL || label.starts_with("notepad-") || label.starts_with("tile-");
+        label == MAIN_WINDOW_LABEL || label.starts_with("diary-") || label.starts_with("pinboard-");
 
     DynamicWindowVisualOptions {
         transparent: is_app_surface,
@@ -1260,7 +1260,7 @@ fn setup_global_shortcut_plugin(app: &AppHandle) -> tauri::Result<()> {
                 let action = app
                     .try_state::<RuntimeState>()
                     .map(|state| state.shortcut_action(shortcut))
-                    .unwrap_or(ShortcutAction::OpenNotepad);
+                    .unwrap_or(ShortcutAction::OpenDiary);
 
                 let app_for_closure = app.clone();
                 match action {
@@ -1271,7 +1271,7 @@ fn setup_global_shortcut_plugin(app: &AppHandle) -> tauri::Result<()> {
                             eprintln!("failed to dispatch visibility toggle action: {error}");
                         }
                     }
-                    ShortcutAction::OpenNotepad => {
+                    ShortcutAction::OpenDiary => {
                         let bounds = if load_config().map(|c| c.open_at_cursor).unwrap_or(true) {
                             let specs = saved_surface_specs(app);
                             cursor_centered_bounds(&specs)
@@ -1280,9 +1280,9 @@ fn setup_global_shortcut_plugin(app: &AppHandle) -> tauri::Result<()> {
                         };
                         if let Err(error) = app.run_on_main_thread(move || {
                             if let Err(error) =
-                                open_notepad_window_now(&app_for_closure, None, bounds)
+                                open_diary_window_now(&app_for_closure, None, bounds)
                             {
-                                eprintln!("failed to open notepad from global shortcut: {error}");
+                                eprintln!("failed to open diary from global shortcut: {error}");
                             }
                         }) {
                             eprintln!("failed to dispatch global shortcut action: {error}");
@@ -1446,7 +1446,7 @@ fn parse_configured_shortcut(field: &str, value: &str) -> Result<Shortcut, Box<d
 
 #[cfg(desktop)]
 fn shortcut_bindings_from_config(config: &AppConfig) -> Result<ShortcutBindings, Box<dyn Error>> {
-    let open_notepad = parse_configured_shortcut("globalShortcut", &config.global_shortcut)?;
+    let open_diary = parse_configured_shortcut("globalShortcut", &config.global_shortcut)?;
     let toggle_visibility = if config.toggle_visibility_shortcut.is_empty() {
         None
     } else {
@@ -1458,7 +1458,7 @@ fn shortcut_bindings_from_config(config: &AppConfig) -> Result<ShortcutBindings,
 
     if toggle_visibility
         .as_ref()
-        .is_some_and(|shortcut| shortcut == &open_notepad)
+        .is_some_and(|shortcut| shortcut == &open_diary)
     {
         return Err(Box::new(AppError {
             code: "duplicateShortcut".into(),
@@ -1468,7 +1468,7 @@ fn shortcut_bindings_from_config(config: &AppConfig) -> Result<ShortcutBindings,
     }
 
     Ok(ShortcutBindings {
-        open_notepad: Some(open_notepad),
+        open_diary: Some(open_diary),
         toggle_visibility,
     })
 }
@@ -1485,7 +1485,7 @@ fn install_global_shortcut_bindings(
         app.global_shortcut().unregister_all()?;
     }
 
-    if let Some(shortcut) = &bindings.open_notepad {
+    if let Some(shortcut) = &bindings.open_diary {
         app.global_shortcut().register(*shortcut)?;
     }
     if let Some(shortcut) = &bindings.toggle_visibility {
@@ -1940,14 +1940,14 @@ mod tests {
 
     #[test]
     fn builds_stable_dynamic_window_labels() {
-        assert_eq!(notepad_window_label(Some("abc-123")), "notepad-abc-123");
-        assert!(notepad_window_label(None).starts_with("notepad-"));
-        assert_eq!(tile_window_label("note-1"), "tile-note-1");
+        assert_eq!(diary_window_label(Some("abc-123")), "diary-abc-123");
+        assert!(diary_window_label(None).starts_with("diary-"));
+        assert_eq!(pinboard_window_label("note-1"), "pinboard-note-1");
     }
 
     #[test]
-    fn keeps_notepad_initial_window_compact() {
-        let specs = notepad_window_specs();
+    fn keeps_diary_initial_window_compact() {
+        let specs = diary_window_specs();
 
         assert_eq!(specs.width, 260.0);
         assert_eq!(specs.height, 260.0);
@@ -1958,11 +1958,11 @@ mod tests {
     #[test]
     fn makes_note_surfaces_transparent() {
         assert_eq!(
-            dynamic_window_visual_options("notepad-note-1"),
+            dynamic_window_visual_options("diary-note-1"),
             DynamicWindowVisualOptions { transparent: true }
         );
         assert_eq!(
-            dynamic_window_visual_options("tile-note-1"),
+            dynamic_window_visual_options("pinboard-note-1"),
             DynamicWindowVisualOptions { transparent: true }
         );
         assert_eq!(
@@ -1972,9 +1972,9 @@ mod tests {
     }
 
     #[test]
-    fn saves_surface_size_before_notepad_and_tile_windows_close() {
-        assert!(should_save_surface_size_before_close("notepad-note-1"));
-        assert!(should_save_surface_size_before_close("tile-note-1"));
+    fn saves_surface_size_before_diary_and_pinboard_windows_close() {
+        assert!(should_save_surface_size_before_close("diary-note-1"));
+        assert!(should_save_surface_size_before_close("pinboard-note-1"));
         assert!(!should_save_surface_size_before_close(MAIN_WINDOW_LABEL));
         assert!(!should_save_surface_size_before_close("settings"));
     }
@@ -1989,7 +1989,7 @@ mod tests {
     }
 
     #[test]
-    fn capability_allows_frontend_window_focus_for_notepad_surfaces() {
+    fn capability_allows_frontend_window_focus_for_diary_surfaces() {
         let capability: serde_json::Value =
             serde_json::from_str(include_str!("../capabilities/default.json"))
                 .expect("default capability should be valid json");
@@ -2002,7 +2002,7 @@ mod tests {
 
         assert!(windows
             .iter()
-            .any(|window| window.as_str() == Some("notepad-*")));
+            .any(|window| window.as_str() == Some("diary-*")));
         assert!(permissions
             .iter()
             .any(|permission| permission.as_str() == Some("core:window:allow-set-focus")));

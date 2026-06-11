@@ -1,4 +1,3 @@
-import { i18n } from "../../locales";
 import { describe, expect, test } from "vitest";
 import { getErrorMessage } from "./api";
 
@@ -28,14 +27,8 @@ describe("notes api error localization", () => {
   });
 
   test("localizes serialized category errors when interpolation details can be recovered", () => {
-    const translate = i18n.getFixedT("en-US");
-
-    expect(getErrorMessage("categoryNotFound: 分类「工作」不存在", translate)).toBe(
-      'Category "工作" not found',
-    );
-    expect(getErrorMessage("categoryAlreadyExists: 分类「工作」已存在", translate)).toBe(
-      'Category "工作" already exists',
-    );
+    expect(getErrorMessage("categoryNotFound: 分类「工作」不存在")).toBe("分类「工作」不存在");
+    expect(getErrorMessage("categoryAlreadyExists: 分类「工作」已存在")).toBe("分类「工作」已存在");
   });
 
   test("falls back to the backend message for unknown error codes", () => {

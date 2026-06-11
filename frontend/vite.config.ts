@@ -26,4 +26,44 @@ export default defineConfig(async () => ({
   test: {
     setupFiles: ["./src/locales/test-setup.ts"],
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          const packagePath = id.split("node_modules/")[1];
+          if (!packagePath) {
+            return undefined;
+          }
+          const [scopeOrName, name] = packagePath.split("/");
+          const packageName = scopeOrName.startsWith("@") ? `${scopeOrName}/${name}` : scopeOrName;
+
+          if (
+            packageName === "react" ||
+            packageName === "react-dom" ||
+            packageName === "scheduler"
+          ) {
+            return "react-vendor";
+          }
+
+          if (packageName === "katex") {
+            return "math-vendor";
+          }
+
+          if (packageName === "parse5" || packageName === "entities") {
+            return "html-parser-vendor";
+          }
+
+          if (packageName === "i18next" || packageName === "react-i18next") {
+            return "i18n-vendor";
+          }
+
+          if (packageName === "chroma-js") {
+            return "color-vendor";
+          }
+
+          return undefined;
+        },
+      },
+    },
+  },
 }));
