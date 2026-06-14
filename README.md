@@ -137,18 +137,54 @@ flowchart LR
 
 ```text
 .
-├── frontend/                  # Tauri 桌面端主工程
-│   ├── src/                   # React 前端
-│   └── src-tauri/             # Rust 本地后端与 Tauri 配置
-├── docs/                      # 项目文档
-│   ├── product/               # 产品说明、架构文档、改造计划
-│   ├── dev/                   # 开发过程记录、迁移说明
-│   └── submission/            # 参赛/验收提交材料
-├── openspec/                  # OpenSpec 需求规范与变更归档
-├── data/                      # 本地运行数据，默认不纳入版本控制
-├── prd.md                     # 产品需求文档
-├── THIRD_PARTY_NOTICES.md     # 第三方许可说明
-└── README.md                  # 项目说明
+├── README.md
+├── THIRD_PARTY_NOTICES.md
+├── .gitignore
+├── .gitattributes
+└── frontend/                    # Tauri 2 桌面应用工程
+    ├── package.json
+    ├── vite.config.ts
+    ├── tsconfig.json
+    ├── index.html
+    ├── tests/                   # 前端测试
+    ├── src/                     # React 19 + TypeScript 前端
+    │   ├── App.tsx
+    │   ├── main.tsx
+    │   ├── components/          # UI 组件
+    │   │   └── panels/          # ChatPanel, GrowthPanel, MemoryPanel
+    │   ├── features/            # 功能模块
+    │   │   ├── api/             # Tauri 命令封装与测试
+    │   │   ├── notes/           # 笔记管理
+    │   │   ├── settings/        # 设置
+    │   │   ├── windows/         # 多窗口管理
+    │   │   ├── importExport/    # 导入导出
+    │   │   └── markdown/        # Markdown 渲染
+    │   ├── locales/             # 国际化 (i18next)
+    │   └── assets/              # 静态资源
+    └── src-tauri/               # Rust 本地后端
+        ├── Cargo.toml
+        ├── tauri.conf.json
+        ├── capabilities/        # Tauri 权限配置
+        ├── icons/               # 应用图标
+        └── src/
+            ├── main.rs
+            ├── lib.rs
+            ├── desktop.rs
+            ├── locales.rs
+            └── services/        # 核心服务模块
+                ├── chat.rs          # 对话管理
+                ├── diary.rs         # 日记生成
+                ├── diary_memory.rs  # 日记相关记忆检索
+                ├── extractor.rs     # 事件/情绪抽取
+                ├── memory.rs        # 记忆管理
+                ├── llm.rs           # LLM 调用
+                ├── database.rs      # SQLite 数据库
+                ├── notes.rs         # Markdown NoteStore
+                ├── life_chapter.rs  # 人生章节
+                ├── weekly_summary.rs# 周总结
+                ├── config.rs        # 配置管理
+                ├── scheduler.rs     # 定时任务
+                └── types.rs         # 类型定义
 ```
 
 ## 快速运行
